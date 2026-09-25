@@ -17,7 +17,7 @@ describe('stdio launcher when Chrome starts later', () => {
     const transport = new StdioClientTransport({
       command: process.execPath,
       args: ['--import', 'tsx', path.resolve('src/main.ts'), 'stdio'],
-      env: { ...process.env, HOME: home },
+      env: { ...process.env, HOME: home, ELECTRON_RUN_AS_NODE: '1' },
       stderr: 'pipe',
     });
     const client = new Client({ name: 'late-host-test', version: '1' }, { capabilities: {} });
@@ -30,6 +30,14 @@ describe('stdio launcher when Chrome starts later', () => {
     expect(client.getInstructions()).toContain('opencli-mcp');
     expect((await client.listTools()).tools.map((tool) => tool.name)).toContain('tab_open');
     expect((await client.listResources()).resources.some((resource) => resource.uri.startsWith('opencli://docs/'))).toBe(true);
+    const offlineDoctor = await client.callTool({ name: 'doctor', arguments: {} });
+    expect(offlineDoctor.isError).not.toBe(true);
+    const offlineData = JSON.parse((offlineDoctor.content[0] as { text: string }).text) as { data: { extension: { id: string; storeUrl: string }; manifests: Array<{ browser: string; present: boolean; launcherExists: boolean; file: string }> } };
+    expect(offlineData.data.extension).toEqual({ id: expect.any(String), storeUrl: expect.stringContaining('chromewebstore.google.com') });
+    const chrome = offlineData.data.manifests.find((manifest) => manifest.browser === 'chrome');
+    expect(chrome).toMatchObject({ present: true, launcherExists: true });
+    const launcher = JSON.parse(fs.readFileSync(chrome!.file, 'utf8')) as { path: string };
+    expect(fs.readFileSync(launcher.path, 'utf8')).toContain('ELECTRON_RUN_AS_NODE=1');
     const offline = await client.callTool({ name: 'tab_open', arguments: { url: 'https://example.com' } });
     expect(offline.isError).toBe(true);
     expect(offline.content).toMatchObject([{ type: 'text', text: expect.stringContaining('host_unavailable') }]);

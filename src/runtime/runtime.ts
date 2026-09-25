@@ -158,7 +158,8 @@ export class Runtime extends EventEmitter<RuntimeEvents> implements PageProvider
     let api = this.siteApis.get(sessionId);
     if (!api) { api = createAgentApi(this, sessionId); this.siteApis.set(sessionId, api); }
     const state = this.session(sessionId);
-    const tab = new Tab(page.getActivePage() ?? 'adapter', { rt: this, sessionId, state }, page);
+    // Adapter identity is the site session; Chrome target identities can rotate.
+    const tab = new Tab(sessionId, { rt: this, sessionId, state }, page);
     return { tab, page, sites: api.sites, recon: api.recon };
   }
 
@@ -183,16 +184,7 @@ export class Runtime extends EventEmitter<RuntimeEvents> implements PageProvider
     await previous;
     try {
       const callContext = { sites: new Set([...(active?.sites ?? []), site]), retired: false };
-      let result = await this.adapterCallContext.run(callContext, () => runAdapter(this, cmd, args, opts));
-      if (!result.ok && cmd.access === 'read' && /stale page identity/.test(result.error.message)) {
-        // A persisted adapter session can retain a Chrome target id after navigation.
-        // Retire that session before replaying a read against a fresh adapter tab.
-        const key = `site:${site}`;
-        const page = this.adapterPages.get(key);
-        this.adapterPages.delete(key);
-        await page?.then((p) => p.closeWindow()).catch(() => {});
-        result = await this.adapterCallContext.run(callContext, () => runAdapter(this, cmd, args, opts));
-      }
+      const result = await this.adapterCallContext.run(callContext, () => runAdapter(this, cmd, args, opts));
       if (!result.ok && result.error.code === 'command_outcome_unknown') {
         callContext.retired = true;
         // Timed-out adapter code may still be running. Retire its page before the next call uses this site.

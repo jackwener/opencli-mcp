@@ -37,21 +37,22 @@ A timeout leaves the configuration in place: enable the extension and rerun setu
 
 ## Embedding the browser host in an app
 
-Chrome starts a Native Messaging host from one executable path in its manifest. It does not pass arguments or a custom environment. `registerHost()` owns the manifest and the launcher. Call it when the app starts or updates, so the manifest follows the current app location:
+An embedding app only needs to start the public CLI entry in `stdio` mode and speak MCP. Resolve the entry from the package instead of importing files inside `dist/`:
 
 ```js
-import { registerHost } from 'opencli-mcp/host-registration.js';
+import { spawn } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 
-registerHost();
+const cli = import.meta.resolve('opencli-mcp/cli');
+const child = spawn(process.execPath, [fileURLToPath(cli), 'stdio'], {
+  stdio: ['pipe', 'pipe', 'inherit'],
+  env: process.versions.electron ? { ...process.env, ELECTRON_RUN_AS_NODE: '1' } : process.env,
+});
 ```
 
-For the normal npm installation, the default uses Node. When called from Electron, it uses the app binary with `ELECTRON_RUN_AS_NODE=1` set in the *new* process. If the app disables Electron's `runAsNode` fuse or ships a dedicated signed helper, provide its executable path:
+`stdio` registers Chrome's Native Messaging host at startup if its registration is missing or broken. A healthy registration from another installation is preserved. The launcher it writes retains `ELECTRON_RUN_AS_NODE=1` when the current runtime is Electron. An Electron build with the `runAsNode` fuse disabled needs a separate Node-capable helper executable.
 
-```js
-registerHost({ launch: { kind: 'executable', path: '/absolute/path/to/signed-helper' } });
-```
-
-The helper must implement the Native Messaging protocol on stdin/stdout and run the opencli-mcp `host` entrypoint. For another host runtime, pass `{ kind: 'command', command: '/absolute/path/to/runtime', args: ['/absolute/path/to/main.js', 'host'], env: { KEY: 'value' } }`. The library serializes that command into a launcher and writes the manifest for the selected browsers and profiles. An executable path must exist and be absolute.
+The `doctor` MCP tool works even before Chrome starts and includes the extension ID, Chrome Web Store URL, browser registration, and connection state. Once the host connects, tool discovery updates on the same stdio channel. Extension and host versions update independently: a protocol revision mismatch appears as a `doctor` warning, while supported commands remain available. If a command fails because the extension does not recognize it, update the host or extension.
 
 ## OpenCode
 
@@ -191,6 +192,7 @@ Run `opencli-mcp doctor` first. It reports whether the browser registration, loc
 |---|---|
 | `browser_unavailable` or host unreachable | Keep Chrome running, enable the extension, and verify the host registration |
 | Web Store extension cannot connect | Run `opencli-mcp setup`; if it stays disconnected, disable and re-enable the extension |
+| `Specified native messaging host not found` in Chrome | Chrome could not find its Native Messaging registration. This is separate from the MCP client registration. Run `opencli-mcp setup --clients none --no-open --wait 0`, then `opencli-mcp doctor --json` to check the manifest path and launcher. A nonzero exit from setup may only mean the extension has not connected yet; the manifest can still be written. Reload the extension in `chrome://extensions` after registering. |
 | No host manifest was written | Rerun `setup`; for custom profiles, pass `--user-data-dir` |
 | MCP client cannot find `opencli-mcp` | Use the absolute executable path in the client configuration |
 | Development changes do not appear | Rebuild the extension and click **Reload** on the extensions page |

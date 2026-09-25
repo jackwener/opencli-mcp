@@ -70,6 +70,8 @@
     "vitest": "^4.1.11"
   },
   "exports": {
+    "./package.json": "./package.json",
+    "./cli": "./dist/src/main.js",
     "./adapter-sdk": {
       "types": "./adapter-sdk/index.d.ts",
       "default": "./adapter-sdk/index.js"

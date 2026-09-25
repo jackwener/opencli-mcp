@@ -100,9 +100,9 @@ export class Tab {
   async forward(): Promise<void> { await this.use((p) => p.history('forward')); }
   async reload(): Promise<void> { await this.use((p) => p.history('reload')); }
   /** Close this tab, whether it was opened or claimed by this session. */
-  async close(): Promise<void> { await this.use((p) => p.closeTab(this.id)); this.closed = true; this.ctx.rt.forgetPage(this.ctx.sessionId, this.id); }
+  async close(): Promise<void> { await this.use((p) => p.closeTab(p.surface === 'adapter' ? undefined : this.id)); this.closed = true; this.ctx.rt.forgetPage(this.ctx.sessionId, this.id); }
   /** Keep this tab open and give up this session's control of it. */
-  async release(): Promise<void> { await this.use((p) => p.releaseTab(this.id)); this.closed = true; this.ctx.rt.forgetPage(this.ctx.sessionId, this.id); }
+  async release(): Promise<void> { await this.use((p) => p.releaseTab(p.surface === 'adapter' ? undefined : this.id)); this.closed = true; this.ctx.rt.forgetPage(this.ctx.sessionId, this.id); }
 
   async observe(opts: ObserveOptions = {}): Promise<{ url: string | null; title: string | null; state?: string; snapshotId?: string; diff?: boolean; changed?: { added: number; removed: number; changed?: number }; image?: ImageValue }> {
     const mode = opts.mode ?? 'state';

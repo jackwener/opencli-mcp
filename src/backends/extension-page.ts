@@ -40,11 +40,6 @@ function isNavigationError(err: unknown): boolean {
   return message.includes('Inspected target navigated or closed') || (message.includes('-32000') && /target|context/i.test(message));
 }
 
-function isStalePageIdentityError(err: unknown): boolean {
-  const message = err instanceof Error ? err.message : String(err);
-  return message.includes('stale page identity') || /^Page not found:\s*\S+\s*$/.test(message);
-}
-
 class ExtensionPage implements ExtensionRuntimePage {
   readonly session: string;
   readonly surface: 'browser' | 'adapter';
@@ -72,23 +67,18 @@ class ExtensionPage implements ExtensionRuntimePage {
     const o = this.opts;
     return { session: o.session, surface: o.surface };
   }
-  private cmdOpts(): Partial<Command> { return { ...this.sessionOpts(), ...(this._page !== undefined && { page: this._page }) }; }
+  private cmdOpts(): Partial<Command> {
+    // A shared adapter owns a session, not one Chrome target. Let the extension
+    // resolve its current leased tab before dispatching the command.
+    const page = this.surface === 'adapter' && !this.bound ? undefined : this._page;
+    return { ...this.sessionOpts(), ...(page !== undefined && { page }) };
+  }
 
   private async send(action: Command['action'], params: Partial<Command> = {}): Promise<{ data: unknown; page?: string }> {
     this.assertOpen();
-    try {
-      return await this.bridge.send(action, { ...this.cmdOpts(), ...params });
-    } catch (err) {
-      // An adapter page is session-scoped. Its Chrome target identity can change
-      // after navigation; retry against the session's current tab identity.
-      if (isStalePageIdentityError(err) && this._page !== undefined && !this.bound) {
-        this._page = undefined;
-        const result = await this.bridge.send(action, { ...this.cmdOpts(), ...params });
-        if (result.page) this._page = result.page;
-        return result;
-      }
-      throw err;
-    }
+    const result = await this.bridge.send(action, { ...this.cmdOpts(), ...params });
+    if (!this.bound && this.surface === 'adapter' && result.page) this._page = result.page;
+    return result;
   }
 
   async goto(url: string, options?: { waitUntil?: 'load' | 'none'; settleMs?: number }): Promise<void> {
@@ -173,7 +163,8 @@ class ExtensionPage implements ExtensionRuntimePage {
   }
   private async endTab(op: 'close' | 'release', target?: string): Promise<void> {
     const params: Partial<Command> = { op, ...this.sessionOpts() };
-    if (typeof target === 'string') params.page = target; else if (this._page !== undefined) params.page = this._page;
+    if (typeof target === 'string') params.page = target;
+    else if (this._page !== undefined && (this.bound || this.surface !== 'adapter')) params.page = this._page;
     await this.bridge.send('tabs', params);
     if (target === undefined || target === this._page) { if (this.bound) this.closed = true; else this._page = undefined; this._lastUrl = null; }
   }

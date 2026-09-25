@@ -10,11 +10,14 @@ import { hostHealth, readHostState } from '../host/state.js';
 import { SESSION_HEADER } from '../host/http.js';
 import { buildInstructions } from '../docs/manifest.js';
 import { localCatalog } from '../mcp/catalog.js';
+import { doctor } from '../host/doctor.js';
+import { ensureHostRegistration } from '../host/registration.js';
 
 class HostUnavailableError extends Error {}
 
 export async function runStdio(opts: { version: string }): Promise<void> {
   const log = (m: string): void => { process.stderr.write(`[opencli-mcp] ${m}\n`); };
+  try { ensureHostRegistration(); } catch (err) { log(`browser registration failed: ${String(err)}`); }
   await proxyToHost(opts.version, log);
 }
 
@@ -79,6 +82,13 @@ async function proxyToHost(version: string, log: (m: string) => void): Promise<v
   // notifications reach the client and client cancellation stops the host call. A dropped host returns a retryable
   // host_unavailable result (not a dead channel), so the client can simply retry once Chrome is back.
   server.setRequestHandler('tools/call', async (r, ctx) => {
+    if (r.params.name === 'doctor') {
+      try { return await via((c) => c.callTool(r.params)); }
+      catch (err) {
+        if (!isDisconnect(err)) throw err;
+        return { content: [{ type: 'text' as const, text: JSON.stringify({ ok: true, data: await doctor() }) }] };
+      }
+    }
     const progressToken = (r.params as { _meta?: { progressToken?: string | number } })._meta?.progressToken;
     const call = (c: Client) => c.callTool(r.params, {
       timeout: 1_800_000,

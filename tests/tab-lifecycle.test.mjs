@@ -41,6 +41,24 @@ describe('browser tab ownership', () => {
     expect(tabs.create).not.toHaveBeenCalled();
   });
 
+  it('replaces a closed adapter tab within its own session', async () => {
+    const tabs = chromeMock();
+    const manager = new SessionManager(() => {});
+    await manager.ready();
+    const session = manager.get('site:twitter', 'adapter');
+    session.leases.set(1, { tabId: 1, origin: 'agent', mark: null, claimedAt: Date.now(), state: 'active' });
+    session.preferredTabId = 1;
+    tabs.get.mockImplementation(async (id) => {
+      if (id === 1) throw new Error('No tab with id: 1');
+      return { id, url: 'about:blank', windowId: 2 };
+    });
+    globalThis.chrome.windows.create = vi.fn(async () => ({ id: 2, tabs: [{ id: 2, windowId: 2, url: 'about:blank' }] }));
+    globalThis.chrome.windows.get = vi.fn(async () => ({ id: 2 }));
+    expect(await manager.resolveTab(session)).toBe(2);
+    expect(session.preferredTabId).toBe(2);
+    expect(session.leases.has(1)).toBe(false);
+  });
+
   it('claims the foreground tab only when exact expected identity still matches', async () => {
     const tabs = chromeMock();
     const active = { id: 7, url: 'https://example.com/active', title: 'Active', windowId: 1, active: true };
