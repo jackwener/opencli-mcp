@@ -15,6 +15,7 @@ Every error has `code`, `message`, optional `hint`, and any structured data spre
 | document reading | `stale_read` | the saved text capture was replaced or the page navigated; call `tab_read` without `readId` to start a new capture |
 | claiming tabs | `claim_not_found`, `claim_ambiguous` (+candidates), `claim_identity_mismatch`, `claim_not_allowed`, `already_claimed` | call `tab_list` with `user:true` and claim by `tabId` |
 | ending tabs | `tab_close_failed`, `tab_release_failed` | Chrome refused to close or release the tab; its lease remains active, so retry `tab_close`, `tab_release`, or `session_finalize` |
-| host unavailable | `host_unavailable`, `extension_update_required` | For `host_unavailable`, start Chrome and retry. For `extension_update_required`, update and reload the connected extension; `doctor` reports both protocol revisions |
+| host unavailable | `host_unavailable` | Start Chrome and retry. A protocol revision difference is reported by `doctor` as a warning; available browser operations still run |
+| unsupported extension action | `unknown_action`, `capability_unavailable` | The connected extension lacks this specific operation. Inspect `doctor` for its advertised features and protocol warning; update the extension if needed |
 | runtime | `browser_unavailable`, `unsupported_backend`, `unknown_browser`, `unknown_capability`, `unknown_doc`, `evaluate_read_only`, `cancelled`, `command_failed` | run `doctor` when the browser bridge is unavailable; use `tab.act` for page writes |
 | uncertain outcome | `command_outcome_unknown`, `command_lost`, `result_evicted` | the command may already have applied. Inspect the browser or site state before deciding whether to run it again |

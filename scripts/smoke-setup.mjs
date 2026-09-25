@@ -147,7 +147,7 @@ try {
   host.stdout.resume();
   const { encodeFrame } = await import('../dist/src/host/native-messaging.js');
   const { PROTOCOL_REVISION } = await import('../dist/src/protocol.js');
-  host.stdin.write(encodeFrame({ type: 'hello', extensionVersion: 'test', protocolRevision: PROTOCOL_REVISION, features: [] }));
+  host.stdin.write(encodeFrame({ type: 'hello', extensionVersion: 'test', protocolRevision: PROTOCOL_REVISION + 1, features: [] }));
   const stateFile = path.join(stateDir, 'run', 'host.json');
   const deadline = Date.now() + 10_000;
   while (!fs.existsSync(stateFile) && Date.now() < deadline && host.exitCode === null) await new Promise((resolve) => setTimeout(resolve, 50));
@@ -156,6 +156,9 @@ try {
   const connected = JSON.parse(await cli(['doctor', '--json']));
   assert.equal(connected.host.extensionConnected, true);
   assert.equal(connected.ok, true);
+  assert.equal(connected.host.backend, 'extension');
+  assert.match(connected.host.protocolWarning, /Browser commands remain available/);
+  assert(connected.advice.some((line) => line.startsWith('Warning: Extension protocol')));
   assert(!('built' in connected.extension));
   const repeated = await cli(['setup', '--clients', 'claude,codex', '--no-open', '--wait', '0']);
   assert(repeated.includes('Setup complete'));

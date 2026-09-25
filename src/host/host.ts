@@ -27,8 +27,8 @@ export async function runNativeHost(opts: { version: string }): Promise<void> {
   catch (err) { log(`port ${config.port ?? DEFAULT_PORT} busy (${(err as Error).message}); using a random port`); http = await startHttpServer(rt, { port: 0, token, version: opts.version }); }
   bridge.ready = { version: opts.version, port: http.port };
   const state = () => ({ pid: process.pid, port: http.port, host: http.host, token });
-  bridge.on('hello', (h) => { log(`extension ${h.extensionVersion} connected`); writeHostState(state()); });
-  if (bridge.connected) { bridge.sendReady(); writeHostState(state()); log(`extension ${bridge.extensionVersion} connected before startup finished`); }
+  bridge.on('hello', (h) => { log(`extension ${h.extensionVersion} connected`); if (bridge.protocolWarning) log(`warning: ${bridge.protocolWarning}`); writeHostState(state()); });
+  if (bridge.connected) { bridge.sendReady(); writeHostState(state()); log(`extension ${bridge.extensionVersion} connected before startup finished`); if (bridge.protocolWarning) log(`warning: ${bridge.protocolWarning}`); }
   rt.on('browser-event', (e) => log(`event ${e.kind}`));
   log(`listening on http://${http.host}:${http.port}/mcp`);
 

@@ -51,7 +51,7 @@ export interface SessionState {
 
 export interface DoctorReport {
   backend: Backend;
-  extension: { connected: boolean; compatible: boolean; version: string | null; protocolRevision: number | null; requiredProtocolRevision: number; features: BrowserFeature[] };
+  extension: { connected: boolean; protocolMatches: boolean; protocolWarning: string | null; version: string | null; protocolRevision: number | null; hostProtocolRevision: number; features: BrowserFeature[] };
   sites: number;
   commands: number;
   definedTools: number;
@@ -97,11 +97,11 @@ export class Runtime extends EventEmitter<RuntimeEvents> implements PageProvider
   }
 
   backend(): Backend {
-    if (this.bridge?.compatible) return 'extension';
+    if (this.bridge?.connected) return 'extension';
     return 'none';
   }
   browserAvailable(): boolean { return this.backend() !== 'none'; }
-  features(): BrowserFeature[] { return this.bridge?.compatible ? this.bridge.extensionFeatures : []; }
+  features(): BrowserFeature[] { return this.bridge?.connected ? this.bridge.extensionFeatures : []; }
   hasFeature(feature: BrowserFeature): boolean { return this.features().includes(feature); }
 
   session(id: string): SessionState {
@@ -147,7 +147,6 @@ export class Runtime extends EventEmitter<RuntimeEvents> implements PageProvider
   }
 
   private async createPage(opts: { session: string; surface: 'browser' | 'adapter'; page?: string }): Promise<RuntimePage> {
-    if (this.bridge?.connected && !this.bridge.compatible) throw Object.assign(new Error(`Extension protocol ${this.bridge.protocolRevision ?? 'unknown'} does not match host protocol ${PROTOCOL_REVISION}.`), { code: 'extension_update_required', hint: 'Update the Chrome extension to the version packaged with this host, then reload it.' });
     const backend = this.backend();
     if (backend === 'extension' && this.bridge) return createExtensionPage(this.bridge, opts);
     throw Object.assign(new Error('No browser backend is connected'), { code: 'browser_unavailable', hint: 'Run `opencli-mcp doctor`. Chrome with the opencli-mcp extension must be running.' });
@@ -249,7 +248,7 @@ export class Runtime extends EventEmitter<RuntimeEvents> implements PageProvider
     const list = this.registry.sites();
     return {
       backend: this.backend(),
-      extension: { connected: Boolean(this.bridge?.connected), compatible: Boolean(this.bridge?.compatible), version: this.bridge?.extensionVersion ?? null, protocolRevision: this.bridge?.protocolRevision ?? null, requiredProtocolRevision: PROTOCOL_REVISION, features: this.features() },
+      extension: { connected: Boolean(this.bridge?.connected), protocolMatches: Boolean(this.bridge?.protocolMatches), protocolWarning: this.bridge?.protocolWarning ?? null, version: this.bridge?.extensionVersion ?? null, protocolRevision: this.bridge?.protocolRevision ?? null, hostProtocolRevision: PROTOCOL_REVISION, features: this.features() },
       sites: list.length,
       commands: list.reduce((n, s) => n + s.commands, 0),
       definedTools: listDefinedTools().length,

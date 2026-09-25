@@ -12,7 +12,7 @@ export interface DoctorResult {
   node: string;
   extension: { id: string; storeUrl: string };
   manifests: Array<{ browser: string; file: string; present: boolean; launcherExists: boolean; authorized: boolean }>;
-  host: { stateFile: string; running: boolean; port?: number; backend?: string; extensionConnected?: boolean; extensionCompatible?: boolean; error?: string };
+  host: { stateFile: string; running: boolean; port?: number; backend?: string; extensionConnected?: boolean; protocolWarning?: string | null; error?: string };
   chromeRunning: boolean | null;
   advice: string[];
 }
@@ -42,14 +42,14 @@ export async function doctor(): Promise<DoctorResult> {
   for (const d of running) if (!manifests.find((m) => m.browser === `profile:${d}`)?.present) advice.push(`Chrome is running with --user-data-dir=${d} but that profile has no host manifest: run \`opencli-mcp setup\` (it writes to running profiles automatically) and reload the extension there.`);
   if (!health.ok) advice.push(`Host not reachable (${health.error ?? 'unknown'}). Open Chrome and install or enable the extension: ${EXTENSION_STORE_URL}. It reconnects automatically; if it stays disconnected, disable and re-enable it in chrome://extensions.`);
   else if (!health.extensionConnected) advice.push('Host is running but the browser is not connected. Enable the extension in Chrome; if it stays disconnected, disable and re-enable it in chrome://extensions.');
-  else if (!health.extensionCompatible) advice.push('The connected Chrome extension does not match this host. Update the extension and reload it.');
+  else if (health.protocolWarning) advice.push(`Warning: ${health.protocolWarning}`);
   if (chromeRunning === false) advice.push('No Chromium-based browser process found; start Chrome.');
   return {
-    ok: registered && health.ok && Boolean(health.extensionCompatible),
+    ok: registered && health.ok && Boolean(health.extensionConnected),
     node: process.version,
     extension: { id: EXTENSION_ID, storeUrl: EXTENSION_STORE_URL },
     manifests,
-    host: { stateFile: HOST_STATE_FILE, running: health.ok, port: state?.port, backend: health.backend, extensionConnected: health.extensionConnected, extensionCompatible: health.extensionCompatible, error: health.error },
+    host: { stateFile: HOST_STATE_FILE, running: health.ok, port: state?.port, backend: health.backend, extensionConnected: health.extensionConnected, protocolWarning: health.protocolWarning, error: health.error },
     chromeRunning,
     advice,
   };

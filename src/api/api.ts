@@ -11,7 +11,6 @@ import type { DraftExpectation } from '../sites/drafts.js';
 import { readDocForContext } from '../docs/manifest.js';
 import { Tab } from './tab.js';
 import { Browser } from './browser.js';
-import { PROTOCOL_REVISION } from '../protocol.js';
 import type { SessionContext } from './context.js';
 
 export interface AgentApi {
@@ -27,7 +26,6 @@ export function createAgentApi(rt: Runtime, sessionId: string): AgentApi {
   const ctx: SessionContext = { rt, sessionId, state };
   // One user, one Chrome — there is no browser fleet to route among; getDefault is the single accessor.
   const getDefault = async (): Promise<Browser> => {
-    if (rt.bridge?.connected && !rt.bridge.compatible) throw new ActionError('extension_update_required', `Extension protocol ${rt.bridge.protocolRevision ?? 'unknown'} does not match host protocol ${PROTOCOL_REVISION}.`, 'Update the Chrome extension to the version packaged with this host, then reload it.');
     if (rt.backend() !== 'extension') throw new ActionError('browser_unavailable', 'No browser backend is connected', 'Run opencli-mcp doctor and keep Chrome with the extension running.');
     return new Browser('chrome', 'extension', ctx);
   };

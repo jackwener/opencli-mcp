@@ -38,14 +38,14 @@ export function readHostState(): HostState | null {
   try { return JSON.parse(fs.readFileSync(HOST_STATE_FILE, 'utf8')) as HostState; } catch { return null; }
 }
 
-export async function hostHealth(s: HostState | null, timeoutMs = 1500): Promise<{ ok: boolean; backend?: string; sessions?: number; extensionConnected?: boolean; extensionCompatible?: boolean; error?: string }> {
+export async function hostHealth(s: HostState | null, timeoutMs = 1500): Promise<{ ok: boolean; backend?: string; sessions?: number; extensionConnected?: boolean; protocolWarning?: string | null; error?: string }> {
   if (!s) return { ok: false, error: 'no host state file' };
   try {
     const ctrl = new AbortController(); const t = setTimeout(() => ctrl.abort(), timeoutMs);
     const res = await fetch(`http://${s.host}:${s.port}/health`, { signal: ctrl.signal, headers: { authorization: `Bearer ${s.token}` } });
     clearTimeout(t);
     if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
-    const j = await res.json() as { backend: string; sessions: number; extensionConnected: boolean; extensionCompatible: boolean };
+    const j = await res.json() as { backend: string; sessions: number; extensionConnected: boolean; protocolWarning: string | null };
     return { ok: true, ...j };
   } catch (err) { return { ok: false, error: (err as Error).message }; }
 }

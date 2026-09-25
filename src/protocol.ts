@@ -189,11 +189,11 @@ export type BrowserEvent =
   | { kind: 'session_released'; session: string; reason: string };
 
 export type HostToExt = { type: 'command'; command: Command } | { type: 'ready'; version: string; port: number };
-/** Bump when the host and extension command contract changes. Package versions are independent. */
+/** Advisory contract revision; individual capabilities and command results decide what works. */
 export const PROTOCOL_REVISION = 1;
 export type BrowserFeature = 'cdp' | 'network' | 'frames' | 'dialogs' | 'console' | 'downloads' | 'viewport' | 'visibility' | 'webmcp';
 export type ExtToHost =
-  | { type: 'hello'; extensionVersion: string; protocolRevision: number; features: BrowserFeature[] }
+  | { type: 'hello'; extensionVersion: string; protocolRevision?: number; features?: BrowserFeature[] }
   | { type: 'result'; result: Result }
   | { type: 'event'; event: BrowserEvent };
 

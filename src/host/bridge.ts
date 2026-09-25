@@ -18,7 +18,7 @@ export class BrowserCommandError extends Error {
 type Pending = { resolve: (r: Result) => void; reject: (e: Error) => void; timer: NodeJS.Timeout };
 
 export interface BridgeEvents {
-  hello: [{ extensionVersion: string; protocolRevision: number; features: BrowserFeature[] }];
+  hello: [Extract<ExtToHost, { type: 'hello' }>];
   event: [BrowserEvent];
   close: [];
 }
@@ -29,7 +29,11 @@ export class ExtensionBridge extends EventEmitter<BridgeEvents> {
   protocolRevision: number | null = null;
   extensionFeatures: BrowserFeature[] = [];
   connected = false;
-  get compatible(): boolean { return this.connected && this.protocolRevision === PROTOCOL_REVISION; }
+  get protocolMatches(): boolean { return this.connected && this.protocolRevision === PROTOCOL_REVISION; }
+  get protocolWarning(): string | null {
+    if (!this.connected || this.protocolMatches) return null;
+    return `Extension protocol ${this.protocolRevision ?? 'unknown'} differs from host protocol ${PROTOCOL_REVISION}. Browser commands remain available; update the host or extension if an operation fails.`;
+  }
 
   /** Set by the host so the extension learns where MCP is served (informational). */
   ready: { version: string; port: number } | null = null;
@@ -58,7 +62,7 @@ export class ExtensionBridge extends EventEmitter<BridgeEvents> {
       this.connected = true;
       this.extensionVersion = msg.extensionVersion;
       this.protocolRevision = msg.protocolRevision ?? null;
-      this.extensionFeatures = msg.features;
+      this.extensionFeatures = Array.isArray(msg.features) ? msg.features : [];
       if (this.ready) { try { this.channel.send({ type: 'ready', ...this.ready }); } catch { /* ignore */ } }
       this.emit('hello', msg);
       return;
@@ -76,7 +80,6 @@ export class ExtensionBridge extends EventEmitter<BridgeEvents> {
 
   /** Send a command; resolves with `data`, throws BrowserCommandError on `ok:false`. */
   async send(action: Action, params: Omit<Command, 'id' | 'action'> = {}, opts: { timeoutMs?: number } = {}): Promise<{ data: unknown; page?: string }> {
-    if (this.connected && !this.compatible) throw new BrowserCommandError(`Extension protocol ${this.protocolRevision ?? 'unknown'} does not match host protocol ${PROTOCOL_REVISION}.`, 'extension_update_required', 'Update the Chrome extension to the version packaged with this host, then reload it.');
     const timeoutMs = opts.timeoutMs ?? (params.timeoutMs ?? 60_000) + 5_000;
     const id = randomUUID();
     const command: Command = { id, action, ...params, deadlineAt: Date.now() + timeoutMs };
@@ -94,7 +97,7 @@ export class ExtensionBridge extends EventEmitter<BridgeEvents> {
         reject(err as Error);
       }
     });
-    if (!result.ok) throw new BrowserCommandError(result.error ?? `${action} failed`, result.errorCode ?? 'browser_command_failed', result.errorHint, result.data);
+    if (!result.ok) throw new BrowserCommandError(result.error ?? `${action} failed`, result.errorCode ?? 'browser_command_failed', result.errorHint ?? (result.errorCode === 'unknown_action' && this.protocolWarning ? 'The connected extension does not support this action; check doctor and update the host or extension if needed.' : undefined), result.data);
     return { data: result.data, page: result.page };
   }
 }

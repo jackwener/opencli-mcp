@@ -45,7 +45,7 @@ export async function startHttpServer(rt: Runtime, opts: { port: number; host?: 
     try {
       if (!authorized(req)) { res.writeHead(401, { 'content-type': 'application/json' }).end(JSON.stringify({ error: 'unauthorized' })); return; }
       if (url.pathname === '/health') {
-        res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ ok: true, backend: rt.backend(), sessions: rt.sessions.size, extensionConnected: Boolean(rt.bridge?.connected), extensionCompatible: Boolean(rt.bridge?.compatible), version: opts.version, uptimeMs: Date.now() - rt.startedAt }));
+        res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ ok: true, backend: rt.backend(), sessions: rt.sessions.size, extensionConnected: Boolean(rt.bridge?.connected), protocolWarning: rt.bridge?.protocolWarning ?? null, version: opts.version, uptimeMs: Date.now() - rt.startedAt }));
         return;
       }
       const rawSession = req.headers[SESSION_HEADER];

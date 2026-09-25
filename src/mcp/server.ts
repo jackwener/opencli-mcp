@@ -91,7 +91,7 @@ export function createMcpServer(rt: Runtime, sessionId: string, opts: { version?
   };
   // ── the entry surface: the few typed tools for the core loop; everything else lives in the object model behind `js` ──
   // ── diagnostics & discovery ──
-  server.registerTool('doctor', { title: 'Doctor', description: 'Runtime status: backend (extension/none), extension version, site/command counts, sessions.', inputSchema: {}, annotations: { readOnlyHint: true } }, async () => run(async () => ok(rt.doctor())));
+  server.registerTool('doctor', { title: 'Doctor', description: 'Runtime status: browser connection, extension features and protocol warning (if versions differ), site/command counts, sessions. A protocol warning does not block browser commands.', inputSchema: {}, annotations: { readOnlyHint: true } }, async () => run(async () => ok(rt.doctor())));
 
   // ── session ──
   server.registerTool('session_finalize', { title: 'Finalize session tabs', description: 'End-of-task cleanup. Agent-created tabs not listed in keep are closed; deliverable tabs leave the group and stay open; handoff tabs stay in the group for a later turn. Claimed user tabs are only released.',
