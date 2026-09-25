@@ -40,11 +40,6 @@ function isNavigationError(err: unknown): boolean {
   return message.includes('Inspected target navigated or closed') || (message.includes('-32000') && /target|context/i.test(message));
 }
 
-function isStalePageIdentityError(err: unknown): boolean {
-  const message = err instanceof Error ? err.message : String(err);
-  return message.includes('stale page identity') || /^Page not found:\s*\S+\s*$/.test(message);
-}
-
 class ExtensionPage implements ExtensionRuntimePage {
   readonly session: string;
   readonly surface: 'browser' | 'adapter';
@@ -52,8 +47,8 @@ class ExtensionPage implements ExtensionRuntimePage {
   private readonly opts: ExtensionPageOptions;
   private _page: string | undefined;
   private _lastUrl: string | null = null;
-  /** A page created for one tab keeps that identity for life: it never adopts another tab, and once its tab is closed or released every command fails with stale_page. */
-  private readonly bound: boolean;
+  /** A page bound to one tab never adopts another, including after a lazy adapter tab is created. */
+  private bound: boolean;
   private closed = false;
 
   constructor(bridge: ExtensionBridge, opts: ExtensionPageOptions) {
@@ -72,28 +67,20 @@ class ExtensionPage implements ExtensionRuntimePage {
     const o = this.opts;
     return { session: o.session, surface: o.surface };
   }
-  private cmdOpts(): Partial<Command> { return { ...this.sessionOpts(), ...(this._page !== undefined && { page: this._page }) }; }
+  private cmdOpts(): Partial<Command> { return { ...this.sessionOpts(), ...((this.bound || this.surface === 'adapter') && this._page !== undefined && { page: this._page }) }; }
 
   private async send(action: Command['action'], params: Partial<Command> = {}): Promise<{ data: unknown; page?: string }> {
     this.assertOpen();
-    try {
-      return await this.bridge.send(action, { ...this.cmdOpts(), ...params });
-    } catch (err) {
-      // An adapter page is session-scoped. Its Chrome target identity can change
-      // after navigation; retry against the session's current tab identity.
-      if (isStalePageIdentityError(err) && this._page !== undefined && !this.bound) {
-        this._page = undefined;
-        const result = await this.bridge.send(action, { ...this.cmdOpts(), ...params });
-        if (result.page) this._page = result.page;
-        return result;
-      }
-      throw err;
+    const result = await this.bridge.send(action, { ...this.cmdOpts(), ...params });
+    if (result.page && !this.bound) {
+      this._page = result.page;
+      if (this.surface === 'adapter') this.bound = true;
     }
+    return result;
   }
 
   async goto(url: string, options?: { waitUntil?: 'load' | 'none'; settleMs?: number }): Promise<void> {
     const result = await this.send('navigate', { url });
-    if (result.page && !this.bound) this._page = result.page;
     this._lastUrl = url;
     if (options?.waitUntil !== 'none') {
       // We drive the user's real Chrome via the extension — no anti-detection stealth needed; just wait for the DOM to settle.
@@ -227,7 +214,8 @@ class ExtensionPage implements ExtensionRuntimePage {
   async pageCall(fn: string, args?: unknown, timeoutMs?: number): Promise<unknown> { return (await this.send('exec', { code: pageCallJs(fn, args), world: 'engine', ...(timeoutMs && { timeoutMs }) })).data; }
   /** Live URL first; the sticky cache is only the fallback while a navigation is in flight. */
   async getCurrentUrl(): Promise<string | null> {
-    try { const u = await this.evaluate('location.href') as unknown; if (typeof u === 'string' && u) { this._lastUrl = u; return u; } } catch { /* mid-navigation */ }
+    try { const u = await this.evaluate('location.href') as unknown; if (typeof u === 'string' && u) { this._lastUrl = u; return u; } }
+    catch (err) { if (!isNavigationError(err)) throw err; }
     return this._lastUrl ?? null;
   }
   async consoleLogs(opts: { afterSequence?: number; limit?: number; levels?: string[]; filter?: string } = {}): Promise<{ cursor: number; entries: ConsoleEntry[]; hasMore: boolean }> { return (await this.send('console', { afterSequence: opts.afterSequence, limit: opts.limit, levels: opts.levels, filter: opts.filter })).data as { cursor: number; entries: ConsoleEntry[]; hasMore: boolean }; }

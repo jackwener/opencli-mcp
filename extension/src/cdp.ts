@@ -5,7 +5,7 @@ import type { DownloadWaitResult } from '../../src/protocol.js';
  *
  * chrome.debugger only needs the "debugger" permission — no host_permissions.
  * It can attach to any http/https tab. Avoid chrome:// and chrome-extension://
- * tabs (resolveTabId in background.ts filters them).
+ * tabs (session tab selection prevents accidental use of unrelated tabs).
  */
 
 const attached = new Set<number>();

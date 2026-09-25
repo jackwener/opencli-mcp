@@ -37,8 +37,6 @@ export interface SessionState {
   pages: Map<string, RuntimePage>;
   /** Per-tab serialization of page operations. */
   tabLocks: Map<string, Promise<void>>;
-  /** The tab the agent used most recently (what `browser.tabs.selected()` returns). */
-  selected?: string;
   enabledSites: Map<string, { write: boolean }>;
   capabilities: Set<string>;
   js?: JsSession;
@@ -69,7 +67,6 @@ export interface RuntimeEvents {
 export class Runtime extends EventEmitter<RuntimeEvents> implements PageProvider {
   readonly registry = new SiteRegistry(defaultSources());
   readonly sessions = new Map<string, SessionState>();
-  private readonly adapterPages = new Map<string, Promise<RuntimePage>>();
   private readonly adapterRuns = new Map<string, Promise<void>>();
   private readonly adapterCallContext = new AsyncLocalStorage<{ sites: Set<string>; retired: boolean }>();
   private readonly siteApis = new Map<string, AgentApi>();
@@ -88,7 +85,7 @@ export class Runtime extends EventEmitter<RuntimeEvents> implements PageProvider
     if (opts.log) this.on('log', opts.log);
     this.bridge?.on('event', (e) => this.emit('browser-event', e));
     this.bridge?.on('hello', () => this.emit('features-changed', this.features()));
-    this.bridge?.on('close', () => { this.adapterPages.clear(); for (const s of this.sessions.values()) { s.browserPage = undefined; s.pages.clear(); } this.emit('features-changed', []); });
+    this.bridge?.on('close', () => { for (const s of this.sessions.values()) { s.browserPage = undefined; s.pages.clear(); } this.emit('features-changed', []); });
   }
 
   async init(): Promise<void> {
@@ -132,18 +129,17 @@ export class Runtime extends EventEmitter<RuntimeEvents> implements PageProvider
     s.pages.set(pageId, page);
     return page;
   }
-  forgetPage(sessionId: string, pageId: string): void { const s = this.sessions.get(sessionId); s?.pages.delete(pageId); s?.tabLocks.delete(pageId); if (s) for (const key of s.lastObserve.keys()) if (key.startsWith(`${pageId}:`)) s.lastObserve.delete(key); if (s?.selected === pageId) s.selected = undefined; }
+  forgetPage(sessionId: string, pageId: string): void { const s = this.sessions.get(sessionId); s?.pages.delete(pageId); s?.tabLocks.delete(pageId); if (s) for (const key of s.lastObserve.keys()) if (key.startsWith(`${pageId}:`)) s.lastObserve.delete(key); }
 
-  /** Background adapter page per site (shared by all MCP sessions). */
+  /** Bind each adapter call to the site's current live tab; the extension owns that selection. */
   async getAdapterPage(site: string): Promise<RuntimePage> {
     const key = `site:${site}`;
-    let p = this.adapterPages.get(key);
-    if (!p) {
-      p = this.createPage({ session: key, surface: 'adapter' });
-      this.adapterPages.set(key, p);
-      p.catch(() => this.adapterPages.delete(key));
-    }
-    return p;
+    const session = await this.createPage({ session: key, surface: 'adapter' });
+    const tabs = await session.tabs() as Array<{ page?: string; selected: boolean; state: 'active' | 'handoff' }>;
+    const active = tabs.filter((tab) => tab.state === 'active');
+    const current = active.find((tab) => tab.selected) ?? active[0];
+    if (current && !current.page) throw Object.assign(new Error('Adapter tab is not ready'), { code: 'tab_pending', hint: 'Retry the adapter command when its tab has a page handle.' });
+    return current?.page ? this.createPage({ session: key, surface: 'adapter', page: current.page }) : session;
   }
 
   private async createPage(opts: { session: string; surface: 'browser' | 'adapter'; page?: string }): Promise<RuntimePage> {
@@ -183,23 +179,12 @@ export class Runtime extends EventEmitter<RuntimeEvents> implements PageProvider
     await previous;
     try {
       const callContext = { sites: new Set([...(active?.sites ?? []), site]), retired: false };
-      let result = await this.adapterCallContext.run(callContext, () => runAdapter(this, cmd, args, opts));
-      if (!result.ok && cmd.access === 'read' && /stale page identity/.test(result.error.message)) {
-        // A persisted adapter session can retain a Chrome target id after navigation.
-        // Retire that session before replaying a read against a fresh adapter tab.
-        const key = `site:${site}`;
-        const page = this.adapterPages.get(key);
-        this.adapterPages.delete(key);
-        await page?.then((p) => p.closeWindow()).catch(() => {});
-        result = await this.adapterCallContext.run(callContext, () => runAdapter(this, cmd, args, opts));
-      }
+      const result = await this.adapterCallContext.run(callContext, () => runAdapter(this, cmd, args, opts));
       if (!result.ok && result.error.code === 'command_outcome_unknown') {
         callContext.retired = true;
         // Timed-out adapter code may still be running. Retire its page before the next call uses this site.
         const key = `site:${site}`;
-        const page = this.adapterPages.get(key);
-        this.adapterPages.delete(key);
-        await page?.then((p) => p.closeWindow()).catch(() => {});
+        await this.createPage({ session: key, surface: 'adapter' }).then((p) => p.closeWindow()).catch(() => {});
       }
       return result;
     } finally {

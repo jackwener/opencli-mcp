@@ -100,7 +100,7 @@ export function createMcpServer(rt: Runtime, sessionId: string, opts: { version?
   }, async ({ keep }) => run(async () => ok(await (await api.agent.browsers.getDefault()).tabs.finalize({ keep }))));
 
   // ── tabs ──
-  server.registerTool('tab_list', { title: 'List tabs', description: 'List this session’s active and handoff tabs and, when user:true, user tabs available to claim. Session tabs include numeric tabId; id is the page handle when ready, or pending:true until ready. Match a pending popup by tabId on a later call. User tabs include tabId for tab_claim.',
+  server.registerTool('tab_list', { title: 'List tabs', description: 'List this session’s active and handoff tabs and, when user:true, user tabs available to claim. Session tabs include a string id (stable for that tab’s lifetime) and numeric tabId. If a tab is pending, match its tabId on a later call. User tabs include tabId for tab_claim.',
     inputSchema: { user: z.boolean().default(false).describe('also list user tabs available to claim'), query: z.string().optional().describe('filter user tabs by title or URL'), limit: z.number().int().min(1).max(100).default(20).describe('maximum user tabs returned') }, annotations: { readOnlyHint: true },
   }, async ({ user, query, limit }) => run(async () => { const b = await api.agent.browsers.getDefault(); return ok({ tabs: await b.tabs.list(), ...(user ? { userTabs: await b.user.openTabs({ query, limit }) } : {}) }); }));
   server.registerTool('tab_open', { title: 'Open a tab', description: 'Open a URL in a new agent tab (background, in this session’s tab group) and return its id plus the initial page state.',

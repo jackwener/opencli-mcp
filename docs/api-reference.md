@@ -44,7 +44,7 @@ class Browser {
 }
 
 class Tab {
-  tabId?: number; // Numeric Chrome tab id when claimed from a user tab; `id` is the session page handle.
+  tabId?: number; // `id` is the Chrome tab id as a string; `tabId` is the numeric id when claimed from a user tab.
   id: string;
   goto(url: string, opts?: { waitUntil?: "load" | "none"; settleMs?: number; }): Promise<{ url: string | null; title: string | null; }>;
   url(): Promise<string | null>;

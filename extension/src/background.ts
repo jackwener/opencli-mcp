@@ -50,8 +50,7 @@ function commandTimeoutMs(cmd: Command): number | undefined {
   return undefined;
 }
 async function pageScoped(id: string, tabId: number, data: unknown): Promise<Result> {
-  const page = await identity.resolveTargetId(tabId).catch(() => undefined);
-  return { id, ok: true, data, page };
+  return { id, ok: true, data, page: identity.pageId(tabId) };
 }
 function errorResult(id: string, err: unknown): Result {
   if (err instanceof SessionError) return { id, ok: false, error: err.message, errorCode: err.code, errorHint: err.hint };
@@ -81,7 +80,7 @@ async function handleCommand(cmd: Command): Promise<Result> {
         const started = executor.pageDownloadsAfter(tabId, downloadFrom).map(({ seq, guid, url, suggestedFilename }) => ({ seq, ...(guid && { guid }), url, suggestedFilename }));
         if (error) {
           const failure = errorResult(cmd.id, error);
-          failure.data = { ...(typeof failure.data === 'object' && failure.data !== null ? failure.data : {}), ...(openedTabs.length && { openedTabs: openedTabs.map(({ page, tabId, url, title, pending }) => ({ ...(page && { tab: page }), tabId, url, title, ...(pending && { pending }) })) }), download: { afterSequence: downloadFrom, started } };
+          failure.data = { ...(typeof failure.data === 'object' && failure.data !== null ? failure.data : {}), ...(openedTabs.length && { openedTabs: openedTabs.map(({ page, tabId, url, title }) => ({ tab: page, tabId, url, title })) }), download: { afterSequence: downloadFrom, started } };
           return failure;
         }
         return pageScoped(cmd.id, tabId, { ...result, ...(openedTabs.length && { openedTabs }), download: { afterSequence: downloadFrom, started } });
@@ -207,6 +206,8 @@ async function handleNavigate(cmd: Command, s: Session): Promise<Result> {
   let navError: string | null = null;
   const onErr = (d: chrome.webNavigation.WebNavigationFramedErrorCallbackDetails) => { if (d.tabId === tabId && d.frameId === 0) navError = d.error; };
   chrome.webNavigation.onErrorOccurred.addListener(onErr);
+  // Adapter tabs may be provisioned blank before the command starts; arm capture before their first navigation too.
+  if (s.surface === 'adapter') await executor.ensureAttached(tabId, false).catch(() => {});
   await chrome.tabs.update(tabId, { url: target });
   let timedOut = false;
   await new Promise<void>((resolve) => {
@@ -230,13 +231,12 @@ async function handleNavigate(cmd: Command, s: Session): Promise<Result> {
 async function handleTabs(cmd: Command, s: Session): Promise<Result> {
   switch (cmd.op) {
     case 'list': {
-      const out: Array<{ index: number; tabId: number; page?: string; pending?: true; url?: string; title?: string; active: boolean; selected: boolean; origin: string; state: string }> = [];
+      const out: Array<{ index: number; tabId: number; page: string; url?: string; title?: string; active: boolean; selected: boolean; origin: string; state: string }> = [];
       let i = 0;
       for (const lease of s.leases.values()) {
         const t = await chrome.tabs.get(lease.tabId).catch(() => null);
         if (!t) continue;
-        const page = await identity.resolveTargetId(lease.tabId).catch(() => undefined);
-        out.push({ index: i++, tabId: lease.tabId, ...(page && { page }), ...(!page && { pending: true as const }), url: t.url, title: t.title, active: Boolean(t.active), selected: lease.tabId === s.preferredTabId, origin: lease.origin, state: lease.state });
+        out.push({ index: i++, tabId: lease.tabId, page: identity.pageId(lease.tabId), url: t.url, title: t.title, active: Boolean(t.active), selected: lease.tabId === s.preferredTabId, origin: lease.origin, state: lease.state });
       }
       return { id: cmd.id, ok: true, data: out };
     }

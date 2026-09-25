@@ -34,9 +34,10 @@ const WRITE_EVAL_RE = /(\.click\s*\(|\.submit\s*\(|\blocation\s*(=|\.href\s*=|\.
 
 export class Tab {
   /** A Tab owns the page object bound to its identity; `bound` lets an adapter pass an existing page. */
-  /** Numeric Chrome tab id when claimed from a user tab; `id` is the session page handle. */
+  /** `id` is the Chrome tab id as a string; `tabId` is the numeric id when claimed from a user tab. */
   readonly tabId?: number;
-  constructor(readonly id: string, private readonly ctx: SessionContext, private readonly bound?: RuntimePage, tabId?: number) { this.tabId = tabId; }
+  constructor(private readonly initialId: string, private readonly ctx: SessionContext, private readonly bound?: RuntimePage, tabId?: number) { this.tabId = tabId; }
+  get id(): string { return this.bound?.getActivePage() ?? this.initialId; }
   private closed = false;
 
   /** Run `fn` on this tab's own page object. Operations are serialized per tab, never across tabs. */
@@ -49,7 +50,6 @@ export class Tab {
       await prev;
       if (this.closed) throw new ActionError('stale_page', `tab ${this.id} was closed`, 'This Tab object is dead; open or claim another tab.');
       if (state.finalized && !state.pages.has(this.id)) throw new ActionError('page_released', `tab ${this.id} was released by finalize`, 'finalize ends the session\'s control of its tabs; open a new tab or claim the tab again (browser.user.claimTab).');
-      state.selected = this.id;
       const page = this.bound ?? await this.ctx.rt.pageFor(this.ctx.sessionId, this.id);
       return await fn(page);
     } finally { release(); }

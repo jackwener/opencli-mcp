@@ -35,14 +35,10 @@ export async function linkedinApi(tab, path, { headers = {}, ...opts } = {}) {
       ...headers,
     },
   };
-  for (let attempt = 0; attempt < 2; attempt++) try {
+  try {
     return await tab.fetchJson(`${ORIGIN}${path}`, request);
   } catch (cause) {
     const message = String(cause?.message ?? cause);
-    if (attempt === 0 && /stale page identity/.test(message) && (!opts.method || opts.method === 'GET')) {
-      await tab.goto(`${ORIGIN}/feed/`, { waitUntil: 'load' });
-      continue;
-    }
     if (/HTTP (401|403)\b/.test(message)) throw errors.auth('LinkedIn API rejected this session', 'Sign in to LinkedIn and check that this account has access to the feature.');
     throw errors.upstream(`LinkedIn API request failed: ${message}`);
   }

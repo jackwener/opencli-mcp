@@ -36,7 +36,7 @@ export interface Command {
   session?: string;
   /** Surface policy: interactive browser session vs. background adapter run. */
   surface?: 'browser' | 'adapter';
-  /** Target page identity (targetId) for page-scoped commands. */
+  /** Stable Chrome tab id, encoded as a string; the extension checks session ownership. */
   page?: string;
   code?: string;
   /** exec: evaluate in the page's main world (default) or in the engine's isolated world */
@@ -190,7 +190,7 @@ export type BrowserEvent =
 
 export type HostToExt = { type: 'command'; command: Command } | { type: 'ready'; version: string; port: number };
 /** Advisory contract revision; individual capabilities and command results decide what works. */
-export const PROTOCOL_REVISION = 1;
+export const PROTOCOL_REVISION = 2;
 export type BrowserFeature = 'cdp' | 'network' | 'frames' | 'dialogs' | 'console' | 'downloads' | 'viewport' | 'visibility' | 'webmcp';
 export type ExtToHost =
   | { type: 'hello'; extensionVersion: string; protocolRevision?: number; features?: BrowserFeature[] }

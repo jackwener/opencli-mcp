@@ -18,7 +18,6 @@ function chromeMock() {
   };
   vi.stubGlobal('chrome', {
     tabs,
-    debugger: { getTargets: vi.fn(async () => [1, 2, 3, 4].map((tabId) => ({ id: `page-${tabId}`, type: 'page', tabId }))) },
     storage: { session: { get: vi.fn(async () => ({})), set: vi.fn(async () => {}) } },
     windows: { onFocusChanged: event(), onRemoved: event() },
     runtime: { onMessage: event() },
@@ -36,7 +35,7 @@ describe('browser tab ownership', () => {
     await manager.ready();
     const session = manager.get('test');
     await expect(manager.resolveTab(session)).rejects.toMatchObject({ code: 'no_tab' });
-    await expect(manager.resolveTab(session, 'page-1')).rejects.toMatchObject({ code: 'page_not_in_session' });
+    await expect(manager.resolveTab(session, '1')).rejects.toMatchObject({ code: 'page_not_in_session' });
     expect(session.leases.size).toBe(0);
     expect(tabs.create).not.toHaveBeenCalled();
   });
@@ -46,7 +45,6 @@ describe('browser tab ownership', () => {
     const active = { id: 7, url: 'https://example.com/active', title: 'Active', windowId: 1, active: true };
     globalThis.chrome.windows.getLastFocused = vi.fn(async () => ({ id: 1, type: 'normal', tabs: [active] }));
     tabs.get.mockResolvedValue(active);
-    globalThis.chrome.debugger.getTargets.mockResolvedValue([{ id: 'page-7', type: 'page', tabId: 7 }]);
     const manager = new SessionManager(() => {});
     await manager.ready();
     const session = manager.get('foreground');
@@ -55,9 +53,27 @@ describe('browser tab ownership', () => {
     await expect(manager.claimUserTab(session, { active: true, url: 'https://example.com/' })).rejects.toMatchObject({ code: 'invalid_args' });
     expect(session.leases.size).toBe(0);
     const claimed = await manager.claimUserTab(session, { active: true, expectedUrl: 'https://example.com/active', expectedTitle: 'Active' });
-    expect(claimed).toMatchObject({ tabId: 7, page: 'page-7' });
+    expect(claimed).toMatchObject({ tabId: 7, page: '7' });
     expect(session.leases.get(7)?.origin).toBe('user');
     expect(tabs.query).not.toHaveBeenCalled();
+    tabs.get.mockResolvedValue({ ...active, url: 'https://example.com/after-navigation' });
+    expect(await manager.resolveTab(session, claimed.page)).toBe(7);
+    tabs.get.mockRejectedValue(new Error('No tab with id 7'));
+    await expect(manager.resolveTab(session, claimed.page)).rejects.toMatchObject({ code: 'stale_page' });
+  });
+  it('skips closed leases when selecting a session tab', async () => {
+    const tabs = chromeMock();
+    tabs.get.mockImplementation(async (tabId) => {
+      if (tabId === 1) throw new Error('No tab with id 1');
+      return { id: tabId, url: 'https://example.com/', windowId: 1 };
+    });
+    const manager = new SessionManager(() => {});
+    await manager.ready();
+    const session = manager.get('test');
+    for (const tabId of [1, 2]) session.leases.set(tabId, { tabId, origin: 'agent', mark: null, claimedAt: Date.now(), state: 'active' });
+    session.preferredTabId = 1;
+    expect(await manager.resolveTab(session)).toBe(2);
+    expect(session.leases.has(1)).toBe(false);
   });
   it('closes explicit user ids in one operation and reports every unavailable tab', async () => {
     const tabs = chromeMock();
@@ -110,7 +126,7 @@ describe('browser tab ownership', () => {
     const session = manager.get('test');
     session.leases.set(1, { tabId: 1, origin: 'agent', mark: null, claimedAt: Date.now(), state: 'active' });
     const result = await manager.finalize(session, []);
-    expect(result).toMatchObject({ closed: [], kept: [], failed: [{ page: 'page-1' }] });
+    expect(result).toMatchObject({ closed: [], kept: [], failed: [{ page: '1' }] });
     expect(session.leases.has(1)).toBe(true);
   });
 });

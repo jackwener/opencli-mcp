@@ -26,7 +26,7 @@ export interface Session {
   lastActivity: number;
 }
 
-type ChildTab = { page?: string; tabId: number; url?: string; title?: string; pending?: true };
+type ChildTab = { page: string; tabId: number; url?: string; title?: string };
 
 type GroupColor = chrome.tabGroups.TabGroup['color'];
 type WindowChoice = { windowId: number; initialTab?: chrome.tabs.Tab };
@@ -235,7 +235,6 @@ export class SessionManager {
             throw new SessionError('tab_create_cleanup_failed', `Opening the page failed and tab ${createdId} could not be closed: ${String(error)}`, 'The tab remains in this session. Use tab_list and tab_close to clean it up.');
           }
         }
-        identity.evictTab(createdId);
       }
       throw error;
     }
@@ -243,7 +242,7 @@ export class SessionManager {
     s.windowId = tab.windowId;
     s.leases.set(tabId, { tabId, origin: 'agent', mark: null, url: tab.url, title: tab.title, claimedAt: Date.now(), state: 'active' });
     s.preferredTabId = tabId;
-    const page = await identity.resolveTargetId(tabId).catch(() => String(tabId));
+    const page = identity.pageId(tabId);
     this.emit({ kind: 'tab_created', session: s.key, page, tabId, url: tab.url, title: tab.title, origin: 'agent' });
     await this.touch(s);
     return { tabId, page, tab };
@@ -297,7 +296,7 @@ export class SessionManager {
     const origin = prior?.state === 'handoff' ? prior.origin : 'user';
     s.leases.set(tabId, { tabId, origin, mark: null, url: tab.url, title: tab.title, claimedAt: Date.now(), state: 'active' });
     s.preferredTabId = tabId;
-    const page = await identity.resolveTargetId(tabId).catch(() => String(tabId));
+    const page = identity.pageId(tabId);
     this.emit({ kind: 'tab_acquired', session: s.key, page, tabId, url: tab.url, title: tab.title, origin });
     await this.touch(s);
     return { tabId: tabId, page, tab };
@@ -324,7 +323,7 @@ export class SessionManager {
     await this.touch(s);
     if (page) {
       let tabId: number;
-      try { tabId = await identity.resolveTabId(page); } catch { throw new SessionError('stale_page', `stale page identity ${page}`, 'The tab was closed or navigated away; open or claim a fresh tab.'); }
+      try { tabId = await identity.resolveTabId(page); } catch { throw new SessionError('stale_page', `stale page identity ${page}`, 'That tab no longer exists; open or claim a fresh tab.'); }
       const lease = s.leases.get(tabId);
       if (lease?.state === 'handoff' || (!lease && this.released.has(tabId))) throw new SessionError('page_released', `page ${page} was handed back to the user by finalize`, 'finalize ends the session\'s control of its tabs; claim the tab again (browser.user.claimTab) or open a new one.');
       if (!lease) {
@@ -338,7 +337,11 @@ export class SessionManager {
     if (s.preferredTabId !== null) {
       try { await chrome.tabs.get(s.preferredTabId); return s.preferredTabId; } catch { s.leases.delete(s.preferredTabId); s.preferredTabId = null; }
     }
-    for (const lease of s.leases.values()) if (lease.state === 'active') { s.preferredTabId = lease.tabId; return lease.tabId; }
+    for (const lease of s.leases.values()) {
+      if (lease.state !== 'active') continue;
+      try { await chrome.tabs.get(lease.tabId); s.preferredTabId = lease.tabId; return lease.tabId; }
+      catch { s.leases.delete(lease.tabId); }
+    }
     if (s.surface === 'adapter') return (await this.createTab(s, initialUrl)).tabId;
     throw new SessionError('no_tab', 'No tab is controlled by this session', 'Use tab_open or tab_claim before a browser operation.');
   }
@@ -347,7 +350,7 @@ export class SessionManager {
   async endTab(s: Session, tabId: number, op: 'close' | 'release'): Promise<{ page: string; closed: boolean; released: boolean }> {
     const lease = s.leases.get(tabId);
     if (!lease) throw new SessionError('page_not_in_session', `tab ${tabId} is not controlled by this session`);
-    const page = await identity.resolveTargetId(tabId).catch(() => String(tabId));
+    const page = identity.pageId(tabId);
     await executor.detach(tabId).catch(() => {});
     await this.hideCursor(tabId);
     if (op === 'close') {
@@ -377,7 +380,6 @@ export class SessionManager {
       if (s.preferredTabId === tabId) s.preferredTabId = null;
       this.emit({ kind: 'tab_released', session: s.key, page, tabId, origin: lease.origin });
     }
-    identity.evictTab(tabId);
     await this.persist();
     return { page, closed: op === 'close', released: op === 'release' };
   }
@@ -401,7 +403,7 @@ export class SessionManager {
     for (const k of keep) { try { keepByTab.set(await identity.resolveTabId(k.page), k.status); } catch { /* gone */ } }
     for (const lease of [...s.leases.values()]) {
       const status = keepByTab.get(lease.tabId) ?? lease.mark ?? null;
-      const page = await identity.resolveTargetId(lease.tabId).catch(() => String(lease.tabId));
+      const page = identity.pageId(lease.tabId);
       if (status === 'handoff') {
         await executor.detach(lease.tabId).catch(() => {});
         await this.hideCursor(lease.tabId);
@@ -438,7 +440,7 @@ export class SessionManager {
     for (const s of this.sessions.values()) {
       if (!s.leases.delete(tabId)) continue;
       if (s.preferredTabId === tabId) s.preferredTabId = null;
-      void identity.resolveTargetId(tabId).catch(() => undefined).then((page) => { identity.evictTab(tabId); this.emit({ kind: 'tab_closed', session: s.key, page, tabId }); });
+      this.emit({ kind: 'tab_closed', session: s.key, page: identity.pageId(tabId), tabId });
       void this.persist();
     }
   }
@@ -458,15 +460,10 @@ export class SessionManager {
     s.leases.set(childId, { tabId: childId, origin: 'agent', mark: null, url: tab.url, title: tab.title, claimedAt: Date.now(), state: 'active' });
     if (!s.visible) await chrome.tabs.update(childId, { muted: true, active: false }).catch(() => {});
     await this.ensureGroup(s, childId);
-    let page: string | undefined;
-    for (let attempt = 0; attempt < 5; attempt++) {
-      page = await identity.resolveTargetId(childId).catch(() => undefined);
-      if (page) break;
-      await new Promise((resolve) => setTimeout(resolve, 50));
-    }
+    const page = identity.pageId(childId);
     this.emit({ kind: 'tab_created', session: s.key, page, tabId: childId, url: tab.url, title: tab.title, origin: 'agent' });
     void this.persist();
-    return { ...(page && { page }), tabId: childId, url: tab.url, title: tab.title, ...(!page && { pending: true as const }) };
+    return { page, tabId: childId, url: tab.url, title: tab.title };
   }
 
   // ── human visibility: content script for cursor overlay ──

@@ -26,7 +26,6 @@ export class Browser {
       const id = await page.newTab(url); // the extension creates the tab and waits for its first load
       if (!id) throw new ActionError('tab_create_failed', 'Could not create a tab', 'Retry; if it persists run doctor to check the browser bridge.');
       this.ctx.state.finalized = false; // new tabs after a finalize are the session's again
-      this.ctx.state.selected = id;
       const tab = new Tab(id, this.ctx, await this.ctx.rt.pageFor(this.ctx.sessionId, id));
       if (url) {
         // another extension may have taken the navigation over (interstitial, redirect to its own page): say so, do not hand out a tab the debugger cannot attach to
@@ -41,14 +40,18 @@ export class Browser {
       return tabs.map((t) => ({ ...(t.page && { id: t.page }), tabId: t.tabId, ...(!t.page && { pending: true as const }), url: t.url, title: t.title, active: t.active, selected: t.selected, origin: t.origin, state: t.state }));
     },
     get: (id: string): Tab => new Tab(id, this.ctx),
-    selected: async (): Promise<Tab | undefined> => { const id = this.ctx.state.selected; return id ? new Tab(id, this.ctx) : undefined; },
+    selected: async (): Promise<Tab | undefined> => {
+      const tabs = (await this.tabs.list()).filter((tab) => tab.state === 'active' && tab.id);
+      const current = tabs.find((tab) => tab.selected) ?? tabs.find((tab) => tab.active) ?? tabs[0];
+      return current?.id ? new Tab(current.id, this.ctx) : undefined;
+    },
     finalize: async (opts: { keep?: Array<{ tab: string | Tab; status: 'deliverable' | 'handoff' }> } = {}): Promise<{ closed: string[]; kept: string[]; failed: Array<{ page: string; reason: string }> }> => {
       const page = await this.page();
       const keep = (opts.keep ?? []).map((k) => ({ page: typeof k.tab === 'string' ? k.tab : k.tab.id, status: k.status }));
       const result = this.ctx.rt.isExtensionPage(page) ? await page.finalize(keep) : (await page.closeWindow(), { closed: [], kept: keep.map((k) => k.page), failed: [] });
       for (const id of [...result.closed, ...result.kept]) this.ctx.rt.forgetPage(this.ctx.sessionId, id);
       this.ctx.state.finalized = result.failed.length === 0;
-      if (this.ctx.state.finalized) { this.ctx.state.pages.clear(); this.ctx.state.tabLocks.clear(); this.ctx.state.selected = undefined; }
+      if (this.ctx.state.finalized) { this.ctx.state.pages.clear(); this.ctx.state.tabLocks.clear(); }
       return result;
     },
   };
@@ -60,7 +63,6 @@ export class Browser {
       const page = this.ext(await this.page());
       const r = await page.claim(tab);
       this.ctx.state.finalized = false;
-      this.ctx.state.selected = r.page;
       return new Tab(r.page, this.ctx, await this.ctx.rt.pageFor(this.ctx.sessionId, r.page), r.tabId);
     },
     /** Close user tabs by Chrome id without claiming or loading their pages. */
