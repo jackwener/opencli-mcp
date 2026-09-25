@@ -1,29 +1,41 @@
 import { describe, expect, it, vi } from 'vitest';
 import search from '../adapters/twitter/search.js';
 
-describe('X search request contract', () => {
-  it('uses the current UI operation and features for API pagination', async () => {
-    const request = new URL('https://x.com/i/api/graphql/current-id/SearchTimeline');
-    request.searchParams.set('variables', JSON.stringify({ count: 20, customFlag: true, cursor: 'old' }));
-    request.searchParams.set('features', JSON.stringify({ liveFeature: true }));
-    request.searchParams.set('fieldToggles', JSON.stringify({ withArticleRichContentState: true }));
-    const tab = {
-      network: {
-        start: vi.fn(async () => true),
-        read: vi.fn().mockResolvedValueOnce({ cursor: 8, entries: [] }).mockResolvedValueOnce({ entries: [{ url: request.toString() }] }),
-      },
-      goto: vi.fn(async () => {}),
-      cookie: vi.fn(async () => 'csrf'),
-      fetchJson: vi.fn(async () => ({ data: { search_by_raw_query: { search_timeline: { timeline: { instructions: [{ entries: [{ entryId: 'tweet-1', content: { itemContent: { tweet_results: { result: { rest_id: '1', legacy: { full_text: 'hello' }, core: { user_results: { result: { legacy: { screen_name: 'someone' } } } } } } } } }] }] } } } } })),
-    };
-    const result = await search.run({ tab, args: { query: 'OpenAI', limit: 1, sort: 'latest' } });
-    expect(result.rows).toHaveLength(1);
-    expect(tab.goto).toHaveBeenCalledWith(expect.stringContaining('f=live'), expect.anything());
-    const api = new URL(tab.fetchJson.mock.calls[0][0], 'https://x.com');
-    expect(api.pathname).toContain('/current-id/SearchTimeline');
-    expect(JSON.parse(api.searchParams.get('features'))).toEqual({ liveFeature: true });
-    expect(JSON.parse(api.searchParams.get('fieldToggles'))).toEqual({ withArticleRichContentState: true });
-    expect(JSON.parse(api.searchParams.get('variables'))).toMatchObject({ rawQuery: 'OpenAI', customFlag: true, product: 'Latest' });
-    expect(api.searchParams.get('variables')).not.toContain('old');
+const tweet = (id) => ({ entryId: `tweet-${id}`, content: { itemContent: { tweet_results: { result: { rest_id: id, legacy: { full_text: `post ${id}` }, core: { user_results: { result: { legacy: { screen_name: 'someone' } } } } } } } } });
+const response = (ids, nextCursor) => JSON.stringify({ data: { search_by_raw_query: { search_timeline: { timeline: { instructions: [{ entries: [
+  ...ids.map(tweet),
+  ...(nextCursor ? [{ entryId: 'cursor-bottom-1', content: { value: nextCursor } }] : []),
+] }] } } } } });
+const entry = (body, cursor) => {
+  const url = new URL('https://x.com/i/api/graphql/current-id/SearchTimeline');
+  url.searchParams.set('variables', JSON.stringify({ rawQuery: 'OpenAI', product: 'Latest', ...(cursor && { cursor }) }));
+  return { url: url.toString(), responseStatus: 200, responsePreview: body, responseBodyTruncated: false };
+};
+const tabWith = (...pages) => {
+  const read = vi.fn().mockResolvedValueOnce({ cursor: 0, entries: [] });
+  pages.forEach((page, i) => read.mockResolvedValueOnce({ cursor: i + 1, entries: [page] }));
+  return { network: { start: vi.fn(async () => true), read }, goto: vi.fn(async () => {}), act: vi.fn(async () => {}) };
+};
+
+describe('X search uses the browser UI response', () => {
+  it('returns every result across calls without replaying the GraphQL endpoint', async () => {
+    const firstTab = tabWith(entry(response(['1', '2'], 'next-page')));
+    const first = await search.run({ tab: firstTab, args: { query: 'OpenAI', limit: 1, sort: 'latest' } });
+    expect(first.rows.map((row) => row.id)).toEqual(['1']);
+    expect(first.nextCursor).toBeTruthy();
+    expect(firstTab.goto).toHaveBeenCalledWith(expect.stringContaining('f=live'), expect.anything());
+
+    const secondTab = tabWith(entry(response(['1', '2'], 'next-page')));
+    const second = await search.run({ tab: secondTab, args: { query: 'OpenAI', limit: 1, sort: 'latest', cursor: first.nextCursor } });
+    expect(second.rows.map((row) => row.id)).toEqual(['2']);
+    expect(second.nextCursor).toBeTruthy();
+    await expect(search.run({ tab: secondTab, args: { query: 'other', limit: 1, sort: 'latest', cursor: first.nextCursor } })).rejects.toMatchObject({ code: 'invalid_args' });
+  });
+
+  it('scrolls to the next UI page when the current page is exhausted', async () => {
+    const tab = tabWith(entry(response(['1'], 'next-page')), entry(response(['2']), 'next-page'));
+    const result = await search.run({ tab, args: { query: 'OpenAI', limit: 2, sort: 'latest' } });
+    expect(result.rows.map((row) => row.id)).toEqual(['1', '2']);
+    expect(tab.act).toHaveBeenCalledWith({ action: 'scroll', direction: 'down', amount: 1900 });
   });
 });

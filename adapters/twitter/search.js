@@ -1,66 +1,105 @@
 import { defineAdapter, errors } from 'opencli-mcp/adapter-sdk';
-import { authHeaders, walkTimeline } from './_shared.js';
+import { walkTimeline } from './_shared.js';
 
-function searchRequest(entries) {
-  for (const entry of [...entries].reverse()) {
-    const raw = String(entry.url || entry.name || '');
-    try {
-      const url = new URL(raw);
-      if (url.hostname !== 'x.com' || !/^\/i\/api\/graphql\/[^/]+\/SearchTimeline$/.test(url.pathname)) continue;
-      return url;
-    } catch { /* ignore incomplete network rows */ }
+function requestUrl(entry) {
+  try {
+    const url = new URL(String(entry.url || entry.name || ''));
+    return url.hostname === 'x.com' && /^\/i\/api\/graphql\/[^/]+\/SearchTimeline$/.test(url.pathname) ? url : null;
+  } catch { return null; }
+}
+
+function pageCursor(url) {
+  try { return JSON.parse(url.searchParams.get('variables') || '{}').cursor || null; }
+  catch { throw errors.upstream('X sent an unreadable SearchTimeline request'); }
+}
+
+function decodeCursor(value, query, sort) {
+  if (!value) return { page: null, offset: 0 };
+  try {
+    const decoded = JSON.parse(Buffer.from(String(value), 'base64url').toString('utf8'));
+    if (decoded.v === 1 && decoded.query === query && decoded.sort === sort && (decoded.page === null || typeof decoded.page === 'string') && Number.isSafeInteger(decoded.offset) && decoded.offset >= 0) return decoded;
+  } catch { /* invalid cursor */ }
+  throw errors.argument('Invalid search cursor', 'Pass nextCursor from a previous search with the same query and sort.');
+}
+
+function encodeCursor(page, offset, query, sort) {
+  return Buffer.from(JSON.stringify({ v: 1, page, offset, query, sort })).toString('base64url');
+}
+
+async function nextUiPage(tab, afterSequence, scroll) {
+  let after = afterSequence;
+  for (let attempt = 0; attempt < 12; attempt++) {
+    if (scroll && attempt % 2 === 0) await tab.act({ action: 'scroll', direction: 'down', amount: 1900 });
+    const captured = await tab.network.read({ pattern: 'SearchTimeline', afterSequence: after, limit: 1 });
+    after = captured.cursor;
+    const entry = captured.entries[0];
+    const url = entry && requestUrl(entry);
+    if (url) {
+      if (entry.responseStatus !== 200) throw errors.upstream(`X search UI returned HTTP ${entry.responseStatus ?? 'unknown'}`);
+      if (entry.responseBodyTruncated) throw errors.upstream('X search response exceeded the Network capture limit');
+      try {
+        const data = JSON.parse(String(entry.responsePreview || ''));
+        return { after, page: pageCursor(url), data };
+      } catch { throw errors.upstream('Could not read the X search response captured from the browser'); }
+    }
+    await new Promise((resolve) => setTimeout(resolve, 500));
   }
-  return null;
+  return { after, page: null, data: null };
 }
 
 export default defineAdapter({
-  description: 'Search X/Twitter for tweets. t.co links are expanded (see `links`).',
+  description: 'Search X/Twitter for tweets through its signed-in web UI. t.co links are expanded (see `links`).',
   access: 'read',
   domain: 'x.com',
   args: [
     { name: 'query', type: 'string', required: true, help: 'Search text (X search operators allowed)' },
     { name: 'limit', type: 'int', default: 20, help: 'How many tweets to return' },
     { name: 'sort', type: 'string', default: 'top', choices: ['top', 'latest'], help: 'Ranking: top or latest' },
-    { name: 'cursor', type: 'string', help: 'nextCursor from a previous call, to page further' },
+    { name: 'cursor', type: 'string', help: 'nextCursor from a previous call with the same query and sort' },
   ],
   async run({ tab, args }) {
     const query = String(args.query || '').trim();
     if (!query) throw errors.argument('`query` is required', 'Give search text, e.g. { query: "anthropic" }');
     const limit = Math.max(1, Number(args.limit) || 20);
-    const product = args.sort === 'latest' ? 'Latest' : 'Top';
-    // X rotates GraphQL operation IDs and feature flags. The signed-in web UI
-    // supplies the current request contract; capture it before replaying pages.
+    const sort = args.sort === 'latest' ? 'latest' : 'top';
+    const target = decodeCursor(args.cursor, query, sort);
+    // The web UI is the source of truth: replaying even its exact GraphQL URL
+    // returns 404 in Chrome, while the UI request succeeds. Capture its response.
     const before = await tab.network.read({ limit: 2000 }).catch(() => ({ cursor: 0 }));
     await tab.network.start('SearchTimeline');
     const uiUrl = new URL('https://x.com/search');
     uiUrl.searchParams.set('q', query);
     uiUrl.searchParams.set('src', 'typed_query');
-    if (product === 'Latest') uiUrl.searchParams.set('f', 'live');
-    await tab.goto(uiUrl.toString(), { waitUntil: 'load', settleMs: 2500 });
-    let request = null;
-    for (let attempt = 0; attempt < 4 && !request; attempt++) {
-      const captured = await tab.network.read({ pattern: 'SearchTimeline', afterSequence: before.cursor, limit: 100 });
-      request = searchRequest(captured.entries);
-      if (!request) await new Promise((resolve) => setTimeout(resolve, 500));
-    }
-    if (!request) throw errors.upstream('Could not observe SearchTimeline from the X web UI; check that search results loaded and the browser extension supports Network capture.');
-    const template = JSON.parse(request.searchParams.get('variables') || '{}');
-    const headers = await authHeaders(tab);
+    if (sort === 'latest') uiUrl.searchParams.set('f', 'live');
+    await tab.goto(uiUrl.toString(), { waitUntil: 'load', settleMs: 3000 });
+
     const seen = new Set();
     const rows = [];
-    let cursor = args.cursor || undefined;
-    for (let guard = 0; rows.length < limit && guard < 20; guard++) {
-      const variables = { ...template, rawQuery: query, count: Math.min(limit - rows.length + 5, 100), querySource: 'typed_query', product, ...(cursor ? { cursor } : { cursor: undefined }) };
-      const pageRequest = new URL(request);
-      pageRequest.searchParams.set('variables', JSON.stringify(variables));
-      const data = await tab.fetchJson(pageRequest.toString(), { headers });
-      const instructions = data?.data?.search_by_raw_query?.search_timeline?.timeline?.instructions || [];
+    let after = before.cursor;
+    let foundTarget = false;
+    for (let guard = 0; guard < 30; guard++) {
+      const captured = await nextUiPage(tab, after, guard > 0);
+      after = captured.after;
+      if (!captured.data) break;
+      const instructions = captured.data?.data?.search_by_raw_query?.search_timeline?.timeline?.instructions;
+      if (!Array.isArray(instructions)) throw errors.upstream('X changed its search timeline response');
       const { tweets, nextCursor } = walkTimeline(instructions, seen);
-      for (const t of tweets) if (rows.length < limit) rows.push(t);
-      cursor = nextCursor || undefined;
-      if (!tweets.length || !cursor) break;
+      if (captured.page === target.page) {
+        foundTarget = true;
+        for (let index = target.offset; index < tweets.length; index++) {
+          rows.push(tweets[index]);
+          if (rows.length >= limit) {
+            const next = index + 1 < tweets.length ? encodeCursor(captured.page, index + 1, query, sort) : nextCursor ? encodeCursor(nextCursor, 0, query, sort) : undefined;
+            return { rows, ...(next && { nextCursor: next }) };
+          }
+        }
+        target.page = nextCursor || null;
+        target.offset = 0;
+      }
+      if (!nextCursor) break;
     }
+    if (!foundTarget && args.cursor) throw errors.argument('Search cursor no longer matches the current results', 'Start a new search without cursor.');
     if (!rows.length) throw errors.empty(`No tweets found for "${query}"`);
-    return { rows, ...(cursor && { nextCursor: cursor }) };
+    return { rows };
   },
 });
