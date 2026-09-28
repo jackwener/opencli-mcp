@@ -41,7 +41,7 @@ export interface Tab {
   act(opts: Record<string, unknown>): Promise<Record<string, unknown>>;
   find(target: Record<string, unknown>): Promise<unknown>;
   expect(what: Record<string, unknown>, opts?: { timeoutMs?: number }): Promise<unknown>;
-  evaluate(js: string, opts?: { allowWrite?: boolean; frame?: number }): Promise<unknown>;
+  evaluate(js: string | ((arg: any) => any), opts?: { arg?: unknown; frame?: number; timeoutMs?: number }): Promise<unknown>;
   /** Fetch JSON through the page (its cookies, its origin) — the network-first way to call a site's own API. */
   fetchJson(url: string, opts?: Record<string, unknown>): Promise<unknown>;
   /** Read one cookie's value at run time (e.g. a csrf token). */

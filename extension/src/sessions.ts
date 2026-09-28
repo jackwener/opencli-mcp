@@ -12,7 +12,7 @@ import * as identity from './identity';
 export type Origin = 'agent' | 'user';
 export type Mark = 'deliverable' | 'handoff' | null;
 
-export interface Lease { tabId: number; origin: Origin; mark: Mark; title?: string; url?: string; claimedAt: number; state: 'active' | 'handoff' }
+export interface Lease { tabId: number; origin: Origin; /** Raw Chrome controls presentation; ownership remains session-managed. */ nativePresentation?: boolean; mark: Mark; title?: string; url?: string; claimedAt: number; state: 'active' | 'handoff' }
 export interface Session {
   key: string;
   surface: 'browser' | 'adapter';
@@ -80,6 +80,22 @@ export class SessionManager {
   }
   constructor(private readonly emit: (e: BrowserEvent) => void) {
     chrome.tabs.onRemoved.addListener((tabId) => this.onTabRemoved(tabId));
+    chrome.tabs.onReplaced?.addListener((added, removed) => {
+      const owner = this.ownerOf(removed);
+      const lease = owner?.leases.get(removed);
+      this.onTabRemoved(removed);
+      if (owner && lease) {
+        owner.leases.set(added, { ...lease, tabId: added });
+        owner.preferredTabId = added;
+        this.emit({ kind: 'tab_acquired', session: owner.key, page: identity.pageId(added), tabId: added, origin: lease.origin });
+        void this.persist();
+      }
+    });
+    chrome.tabs.onUpdated.addListener((tabId, info, tab) => {
+      const owner = this.ownerOf(tabId); const lease = owner?.leases.get(tabId);
+      if (lease) { lease.url = tab.url; lease.title = tab.title; void this.persist(); }
+      if (info.status === 'loading' || info.url) this.emit({ kind: 'tab_navigated', session: owner?.key ?? '', page: identity.pageId(tabId), tabId });
+    });
     chrome.tabs.onActivated.addListener(({ tabId }) => { void this.unmuteIfOurs(tabId); void this.publishCursor(tabId); });
     chrome.windows.onFocusChanged.addListener(() => { for (const tabId of this.cursorState.keys()) void this.publishCursor(tabId); });
     // a freshly loaded document (navigation, bfcache restore) asks for the current overlay state instead of starting blank
@@ -248,6 +264,28 @@ export class SessionManager {
     return { tabId, page, tab };
   }
 
+  async preserveNativePresentation(tabIds: number[]): Promise<void> {
+    for (const tabId of tabIds) {
+      const lease = this.ownerOf(tabId)?.leases.get(tabId);
+      if (lease) lease.nativePresentation = true;
+    }
+    await this.persist();
+  }
+
+  /** Record raw Chrome creations without changing focus, mute state, window or group. */
+  async adoptCreatedTab(s: Session, tab: chrome.tabs.Tab): Promise<void> {
+    if (tab?.id === undefined || this.ownerOf(tab.id)) return;
+    // A tab can close before its create result arrives. Do not retain a dead lease.
+    const live = await chrome.tabs.get(tab.id).catch(() => null);
+    if (!live) return;
+    const tabId = tab.id;
+    this.released.delete(tabId);
+    s.leases.set(tabId, { tabId, origin: 'agent', nativePresentation: true, mark: null, url: live.url, title: live.title, claimedAt: Date.now(), state: 'active' });
+    s.preferredTabId = tabId;
+    this.emit({ kind: 'tab_created', session: s.key, page: identity.pageId(tabId), tabId, url: live.url, title: live.title, origin: 'agent' });
+    await this.touch(s);
+  }
+
   async listUserTabs(options: { query?: string; limit?: number; all?: boolean } = {}): Promise<Array<{ tabId: number; title?: string; url?: string; windowId: number; active: boolean; groupId?: number; lastAccessed?: number }>> {
     const tabs = await chrome.tabs.query({ windowType: 'normal' });
     const query = options.query?.trim().toLowerCase();
@@ -368,7 +406,7 @@ export class SessionManager {
       }
       this.emit({ kind: 'tab_closed', session: s.key, page, tabId, origin: lease.origin });
     } else {
-      if (lease.origin === 'agent') {
+      if (lease.origin === 'agent' && !lease.nativePresentation) {
         try {
           await chrome.tabs.update(tabId, { muted: false });
           const tab = await chrome.tabs.get(tabId);
@@ -445,7 +483,8 @@ export class SessionManager {
     }
   }
   private async unmuteIfOurs(tabId: number): Promise<void> {
-    if (!this.ownerOf(tabId)) return;
+    const owner = this.ownerOf(tabId);
+    if (!owner || owner.leases.get(tabId)?.nativePresentation) return;
     const t = await chrome.tabs.get(tabId).catch(() => null);
     if (t?.mutedInfo?.muted && t.mutedInfo.reason === 'extension') await chrome.tabs.update(tabId, { muted: false }).catch(() => {});
   }

@@ -83,7 +83,7 @@ async function sendMessage(tab, token, payload) {
     let json = null;
     try { json = text ? JSON.parse(text) : null; } catch { /* empty/non-JSON success */ }
     return { status: response.status, ok: response.ok, json };
-  })()`, { allowWrite: true });
+  })()`);
   if (response?.status === 401 || response?.status === 403) throw errors.auth('Sales Navigator message API denied access');
   if (!response?.ok) throw errors.upstream(`Sales Navigator message API returned HTTP ${response?.status || 'unknown'}`);
   return response;

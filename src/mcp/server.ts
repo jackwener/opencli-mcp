@@ -101,7 +101,7 @@ export function createMcpServer(rt: Runtime, sessionId: string, opts: { version?
     inputSchema: { code: z.string(), timeoutMs: z.number().int().min(1).max(1_800_000).default(300_000), maxChars: z.number().int().min(1000).max(120_000).default(12_000).describe('result text budget; retain large data in a variable and return only relevant parts') },
     annotations: { openWorldHint: true, destructiveHint: true },
   }, async ({ code, timeoutMs, maxChars }, extra) => run(async () => {
-    if (!state.js) state.js = new JsSession(jsGlobals);
+    if (!state.js) state.js = new JsSession(jsGlobals, async () => { if (rt.hasFeature('streams')) await rt.bridge!.send('streams-reset', { session: `mcp:${sessionId}` }); });
     const r = await state.js.run(code, { timeoutMs, signal: ctxExtra(extra).signal });
     await syncSiteTools();
     const content: Content = [];
@@ -119,7 +119,7 @@ export function createMcpServer(rt: Runtime, sessionId: string, opts: { version?
     for (const img of r.images) content.push({ type: 'image', data: img.base64, mimeType: img.mimeType });
     return { content, isError: Boolean(r.error) };
   }));
-  server.registerTool('js_reset', { title: 'Reset JavaScript session', description: 'Stop JavaScript and clear bindings; browser tabs stay open. pendingCalls reports already dispatched API operations that may still complete. Wait until doctor shows javascript.pendingCalls:0 before more js; inspect the page before retrying actions.', inputSchema: {} }, async () => run(async () => { return ok(state.js?.reset() ?? { reset: true, pendingCalls: 0 }); }));
+  server.registerTool('js_reset', { title: 'Reset JavaScript session', description: 'Stop JavaScript, clear bindings and close explicit subscriptions; browser tabs stay open. pendingCalls reports already dispatched API operations that may still complete. Wait until doctor shows javascript.pendingCalls:0 before more js; inspect the page before retrying actions.', inputSchema: {} }, async () => run(async () => { return ok(state.js?.reset() ?? { reset: true, pendingCalls: 0 }); }));
 
   // ── dynamic site tools ──
   const siteTools = new Map<string, { reg: RegisteredTool; metadata: string }>();

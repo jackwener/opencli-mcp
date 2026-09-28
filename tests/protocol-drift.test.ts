@@ -25,6 +25,7 @@ describe('extension protocol drift', () => {
     expect(rt.doctor().extension).toMatchObject({ connected: true, protocolMatches: false, protocolWarning: expect.stringContaining('Browser commands remain available') });
     const browser = await createAgentApi(rt, 'test').agent.browsers.getDefault();
     expect(await browser.tabs.list()).toEqual([]);
+    await expect(browser.chrome.call('tabs.query', [{}])).rejects.toMatchObject({ code: 'capability_unavailable' });
     expect((await browser.capabilities.list()).map((item) => item.id)).toEqual(['cdp']);
     await expect(bridge.send('history')).rejects.toMatchObject({ code: 'unknown_action', hint: expect.stringContaining('update the host or extension') } satisfies Partial<BrowserCommandError>);
 

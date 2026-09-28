@@ -3,6 +3,8 @@
  * session naming, capabilities (cdp, viewport, visibility, webmcp) and the model-facing documentation.
  */
 import type { RuntimePage } from '../backends/page-types.js';
+import { browserCommand, watch } from './streams.js';
+import type { StreamOptions, StreamReadOptions, StreamBatch } from '../protocol.js';
 import type { CloseUserTabsResult } from '../protocol.js';
 import type { ExtensionRuntimePage, UserTabInfo } from '../backends/extension-page.js';
 import { ActionError } from './errors.js';
@@ -19,6 +21,19 @@ export class Browser {
     if (!this.ctx.rt.isExtensionPage(page)) throw new ActionError('unsupported_backend', 'This operation needs the Chrome extension backend', 'Run doctor; make sure Chrome is running with the opencli-mcp extension.');
     return page;
   }
+
+  /** Native Chrome APIs in the extension service worker. Positional JSON arguments, native return values. */
+  readonly chrome = {
+    call: async (method: string, args: unknown[] = []): Promise<unknown> => browserCommand(this.ctx, 'chrome-api', 'chrome-call', { chromeMethod: method, chromeArgs: args }),
+    describe: async (member: string): Promise<unknown> => browserCommand(this.ctx, 'chrome-api', 'chrome-describe', { chromeMethod: member }),
+    watch: async (event: string, options?: StreamOptions) => watch(this.ctx, 'chrome', event, options),
+  };
+
+  /** This extension's own service-worker logs; not logs of other installed extensions. */
+  readonly logs = {
+    watch: async (options?: StreamOptions) => watch(this.ctx, 'extension', undefined, options),
+    read: async (options: StreamReadOptions = {}): Promise<StreamBatch> => browserCommand(this.ctx, 'extension-logs', 'extension-logs', { streamRead: options }) as Promise<StreamBatch>,
+  };
 
   readonly tabs = {
     new: async (url?: string): Promise<Tab> => {
@@ -87,7 +102,9 @@ export class Browser {
       const page = await this.page();
       if (!this.ctx.rt.hasFeature(id as import('../protocol.js').BrowserFeature)) throw new ActionError('capability_unavailable', `${id} is not advertised by the connected extension.`, 'Call browser.capabilities.list() or doctor for current capabilities.');
       this.ctx.state.capabilities.add(id);
-      if (id === 'cdp') return { send: (method: string, params?: Record<string, unknown>) => page.cdp(method, params), documentation: () => readDocForContext('capabilities/cdp', { backend: this.ctx.rt.backend(), capabilities: this.ctx.rt.features() }) };
+      if (id === 'cdp') return { documentation: () => readDocForContext('capabilities/cdp', { backend: this.ctx.rt.backend(), capabilities: this.ctx.rt.features() }) };
+      if (id === 'chrome-api') return this.chrome;
+      if (id === 'extension-logs') return this.logs;
       if (id === 'viewport') return { set: ({ width, height }: { width: number; height: number }) => page.cdp('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false }), reset: () => page.cdp('Emulation.clearDeviceMetricsOverride', {}) };
       if (id === 'visibility') { const ext = this.ext(page); return { get: () => ext.getVisibility(), set: (v: boolean) => ext.setVisibility(v), documentation: () => readDocForContext('capabilities/visibility', { backend: this.ctx.rt.backend(), capabilities: this.ctx.rt.features() }) }; }
       if (id === 'webmcp') { const sel = await this.tabs.selected(); if (!sel) throw new ActionError('no_tab', 'Open a tab first', 'Call browser.tabs.new (or browser.user.claimTab a user tab) before using this capability.'); return { list: () => sel.webmcp.list(), call: (name: string, input?: Record<string, unknown>) => sel.webmcp.call(name, input), documentation: () => readDocForContext('capabilities/webmcp', { backend: this.ctx.rt.backend(), capabilities: this.ctx.rt.features() }) }; }

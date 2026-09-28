@@ -1,3 +1,5 @@
+import { watch } from './streams.js';
+import type { StreamOptions, StreamReadOptions } from '../protocol.js';
 /**
  * Tab — one browser tab of a session: observe (aria snapshot + semantic diff), find, act, expect, evaluate, screenshot,
  * network/console/dialog/webmcp/frames. A Tab owns the page object bound to its identity; operations are serialized per tab.
@@ -44,9 +46,6 @@ export interface ReadOptions { /** stop after this many characters. Default 6000
 
 export interface ImageValue { __image: true; mimeType: string; base64: string }
 
-
-
-const WRITE_EVAL_RE = /(\.click\s*\(|\.submit\s*\(|\blocation\s*(=|\.href\s*=|\.assign\s*\(|\.replace\s*\()|document\.write|\.remove\s*\(\)|localStorage\.(setItem|removeItem|clear)|\.value\s*=[^=])/;
 
 export class Tab {
   /** A Tab owns the page object bound to its identity; `bound` lets an adapter pass an existing page. */
@@ -259,13 +258,20 @@ export class Tab {
     });
   }
 
-  /** Read-only page evaluation. */
-  async evaluate(js: string, opts: { allowWrite?: boolean; frame?: number } = {}): Promise<unknown> {
-    if (!opts.allowWrite && WRITE_EVAL_RE.test(js)) throw new ActionError('evaluate_read_only', 'evaluate is read-only; use act() for clicks, typing, navigation and form changes', 'Pass allowWrite:true only when the user explicitly wants a scripted page change.');
-    return this.use(async (page) => {
-      return opts.frame !== undefined ? page.evaluateInFrame(js, opts.frame) : page.evaluate(js);
-    });
+  /** Main World page code; functions receive only opts.arg, never host closures. Dispatched scripts are never replayed. */
+  async evaluate(script: string | ((arg: any) => any), opts: { arg?: unknown; frame?: number; timeoutMs?: number } = {}): Promise<unknown> {
+    if (opts.timeoutMs !== undefined && (!Number.isFinite(opts.timeoutMs) || opts.timeoutMs < 1 || opts.timeoutMs > 300_000)) throw new ActionError('invalid_args', 'timeoutMs must be from 1 to 300000');
+    const source = typeof script === 'function' ? script.toString() : (script as unknown as { $function?: string })?.$function;
+    const expression = source ? `(${source})(${JSON.stringify(opts.arg) ?? 'undefined'})` : script as string;
+    if (typeof expression !== 'string') throw new ActionError('invalid_args', 'evaluate expects page source or a function');
+    return this.use(page => opts.frame !== undefined ? page.evaluateInFrame(expression, opts.frame, opts.timeoutMs) : page.evaluate(expression, { timeoutMs: opts.timeoutMs }));
   }
+
+  /** Native CDP on this Tab's shared debugger attachment. Parameters are not rewritten. */
+  readonly cdp = {
+    send: async (method: string, params: Record<string, unknown> = {}, target?: { frameId: string }): Promise<unknown> => this.use(page => page.cdp(method, params, target)),
+    watch: async (event: string, options?: StreamOptions) => this.use(async page => watch(this.ctx, 'cdp', event, options, this.id, {session: page.session, surface: page.surface})),
+  };
 
   /** Native alert/confirm/prompt dialogs block the page; commands fail with `dialog_open` until answered. */
   readonly dialog = {
@@ -276,7 +282,11 @@ export class Tab {
 
   /** Console messages and uncaught exceptions since the tab was attached (the plugin's tab.dev.logs); cursor-paged like network.read. */
   readonly console = {
-    read: async (opts: { afterSequence?: number; limit?: number; levels?: Array<'debug' | 'info' | 'log' | 'warn' | 'error'>; filter?: string } = {}) => this.use((p) => p.consoleLogs(opts)),
+    read: async (opts: StreamReadOptions = {}) => {
+      if (!this.ctx.rt.hasFeature('streams')) throw new ActionError('capability_unavailable', 'This console cursor interface needs an extension with streams support.', 'Update the extension; other browser operations remain available.');
+      return this.use(p => p.consoleLogs(opts));
+    },
+    watch: async (options?: StreamOptions) => this.use(async page => watch(this.ctx, 'console', undefined, options, this.id, {session: page.session, surface: page.surface})),
   };
 
   readonly network = {

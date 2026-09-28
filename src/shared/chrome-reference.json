@@ -1,0 +1,1976 @@
+{
+  "source": "@types/chrome@0.3.0",
+  "methods": {
+    "debugger.attach": {
+      "signatures": [
+        "(target: Debuggee, requiredVersion: string): Promise<void>"
+      ],
+      "parameters": {
+        "target": {
+          "tabId?": "number",
+          "extensionId?": "string",
+          "targetId?": "string"
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/debugger#method-attach"
+    },
+    "debugger.detach": {
+      "signatures": [
+        "(target: Debuggee): Promise<void>"
+      ],
+      "parameters": {
+        "target": {
+          "tabId?": "number",
+          "extensionId?": "string",
+          "targetId?": "string"
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/debugger#method-detach"
+    },
+    "debugger.sendCommand": {
+      "signatures": [
+        "(target: DebuggerSession, method: string, commandParams?: { [key: string]: unknown; }): Promise<object | undefined>"
+      ],
+      "parameters": {
+        "target": {
+          "extensionId?": "string",
+          "sessionId?": "string",
+          "tabId?": "number",
+          "targetId?": "string"
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/debugger#method-sendCommand"
+    },
+    "debugger.getTargets": {
+      "signatures": [
+        "(): Promise<TargetInfo[]>"
+      ],
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/debugger#method-getTargets"
+    },
+    "tabs.executeScript": {
+      "signatures": [
+        "(details: extensionTypes.InjectDetails): Promise<any[] | undefined>",
+        "(tabId: number | undefined, details: extensionTypes.InjectDetails): Promise<any[] | undefined>"
+      ],
+      "parameters": {
+        "details": {
+          "allFrames?": "boolean",
+          "code?": "string",
+          "cssOrigin?": "CSSOrigin",
+          "file?": "string",
+          "frameId?": "number",
+          "matchAboutBlank?": "boolean",
+          "runAt?": "RunAt"
+        },
+        "tabId": {
+          "toString": "(radix?: number) => string",
+          "toFixed": "(fractionDigits?: number) => string",
+          "toExponential": "(fractionDigits?: number) => string",
+          "toPrecision": "(precision?: number) => string",
+          "valueOf": "() => number",
+          "toLocaleString": "{ (locales?: string | string[], options?: Intl.NumberFormatOptions): string; (locales?: Intl.LocalesArgument, options?: Intl.NumberFormatOptions): string; }"
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/tabs#method-executeScript"
+    },
+    "tabs.get": {
+      "signatures": [
+        "(tabId: number): Promise<Tab>"
+      ],
+      "parameters": {
+        "tabId": {
+          "toString": "(radix?: number) => string",
+          "toFixed": "(fractionDigits?: number) => string",
+          "toExponential": "(fractionDigits?: number) => string",
+          "toPrecision": "(precision?: number) => string",
+          "valueOf": "() => number",
+          "toLocaleString": "{ (locales?: string | string[], options?: Intl.NumberFormatOptions): string; (locales?: Intl.LocalesArgument, options?: Intl.NumberFormatOptions): string; }"
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/tabs#method-get"
+    },
+    "tabs.getAllInWindow": {
+      "signatures": [
+        "(windowId?: number): Promise<Tab[]>"
+      ],
+      "parameters": {
+        "windowId": {
+          "toString": "(radix?: number) => string",
+          "toFixed": "(fractionDigits?: number) => string",
+          "toExponential": "(fractionDigits?: number) => string",
+          "toPrecision": "(precision?: number) => string",
+          "valueOf": "() => number",
+          "toLocaleString": "{ (locales?: string | string[], options?: Intl.NumberFormatOptions): string; (locales?: Intl.LocalesArgument, options?: Intl.NumberFormatOptions): string; }"
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/tabs#method-getAllInWindow"
+    },
+    "tabs.getCurrent": {
+      "signatures": [
+        "(): Promise<Tab | undefined>"
+      ],
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/tabs#method-getCurrent"
+    },
+    "tabs.getSelected": {
+      "signatures": [
+        "(windowId?: number): Promise<Tab>"
+      ],
+      "parameters": {
+        "windowId": {
+          "toString": "(radix?: number) => string",
+          "toFixed": "(fractionDigits?: number) => string",
+          "toExponential": "(fractionDigits?: number) => string",
+          "toPrecision": "(precision?: number) => string",
+          "valueOf": "() => number",
+          "toLocaleString": "{ (locales?: string | string[], options?: Intl.NumberFormatOptions): string; (locales?: Intl.LocalesArgument, options?: Intl.NumberFormatOptions): string; }"
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/tabs#method-getSelected"
+    },
+    "tabs.create": {
+      "signatures": [
+        "(createProperties: CreateProperties): Promise<Tab>"
+      ],
+      "parameters": {
+        "createProperties": {
+          "index?": "number",
+          "openerTabId?": "number",
+          "url?": "string",
+          "pinned?": "boolean",
+          "windowId?": "number",
+          "active?": "boolean",
+          "selected?": "boolean"
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/tabs#method-create"
+    },
+    "tabs.move": {
+      "signatures": [
+        "(tabId: number, moveProperties: MoveProperties): Promise<Tab>",
+        "(tabIds: number[], moveProperties: MoveProperties): Promise<Tab[]>"
+      ],
+      "parameters": {
+        "tabId": {
+          "toString": "(radix?: number) => string",
+          "toFixed": "(fractionDigits?: number) => string",
+          "toExponential": "(fractionDigits?: number) => string",
+          "toPrecision": "(precision?: number) => string",
+          "valueOf": "() => number",
+          "toLocaleString": "{ (locales?: string | string[], options?: Intl.NumberFormatOptions): string; (locales?: Intl.LocalesArgument, options?: Intl.NumberFormatOptions): string; }"
+        },
+        "moveProperties": {
+          "index": "number",
+          "windowId?": "number"
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/tabs#method-move"
+    },
+    "tabs.update": {
+      "signatures": [
+        "(updateProperties: UpdateProperties): Promise<Tab | undefined>",
+        "(tabId: number | undefined, updateProperties: UpdateProperties): Promise<Tab | undefined>"
+      ],
+      "parameters": {
+        "updateProperties": {
+          "pinned?": "boolean",
+          "openerTabId?": "number",
+          "url?": "string",
+          "highlighted?": "boolean",
+          "active?": "boolean",
+          "selected?": "boolean",
+          "muted?": "boolean",
+          "autoDiscardable?": "boolean"
+        },
+        "tabId": {
+          "toString": "(radix?: number) => string",
+          "toFixed": "(fractionDigits?: number) => string",
+          "toExponential": "(fractionDigits?: number) => string",
+          "toPrecision": "(precision?: number) => string",
+          "valueOf": "() => number",
+          "toLocaleString": "{ (locales?: string | string[], options?: Intl.NumberFormatOptions): string; (locales?: Intl.LocalesArgument, options?: Intl.NumberFormatOptions): string; }"
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/tabs#method-update"
+    },
+    "tabs.remove": {
+      "signatures": [
+        "(tabId: number): Promise<void>",
+        "(tabIds: number[]): Promise<void>"
+      ],
+      "parameters": {
+        "tabId": {
+          "toString": "(radix?: number) => string",
+          "toFixed": "(fractionDigits?: number) => string",
+          "toExponential": "(fractionDigits?: number) => string",
+          "toPrecision": "(precision?: number) => string",
+          "valueOf": "() => number",
+          "toLocaleString": "{ (locales?: string | string[], options?: Intl.NumberFormatOptions): string; (locales?: Intl.LocalesArgument, options?: Intl.NumberFormatOptions): string; }"
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/tabs#method-remove"
+    },
+    "tabs.captureVisibleTab": {
+      "signatures": [
+        "(): Promise<string>",
+        "(windowId: number): Promise<string>",
+        "(options: extensionTypes.ImageDetails): Promise<string>",
+        "(windowId: number, options: extensionTypes.ImageDetails): Promise<string>"
+      ],
+      "parameters": {
+        "windowId": {
+          "toString": "(radix?: number) => string",
+          "toFixed": "(fractionDigits?: number) => string",
+          "toExponential": "(fractionDigits?: number) => string",
+          "toPrecision": "(precision?: number) => string",
+          "valueOf": "() => number",
+          "toLocaleString": "{ (locales?: string | string[], options?: Intl.NumberFormatOptions): string; (locales?: Intl.LocalesArgument, options?: Intl.NumberFormatOptions): string; }"
+        },
+        "options": {
+          "format?": "ImageFormat",
+          "quality?": "number"
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/tabs#method-captureVisibleTab"
+    },
+    "tabs.reload": {
+      "signatures": [
+        "(): Promise<void>",
+        "(tabId: number): Promise<void>",
+        "(reloadProperties: ReloadProperties): Promise<void>",
+        "(tabId: number, reloadProperties: ReloadProperties): Promise<void>"
+      ],
+      "parameters": {
+        "tabId": {
+          "toString": "(radix?: number) => string",
+          "toFixed": "(fractionDigits?: number) => string",
+          "toExponential": "(fractionDigits?: number) => string",
+          "toPrecision": "(precision?: number) => string",
+          "valueOf": "() => number",
+          "toLocaleString": "{ (locales?: string | string[], options?: Intl.NumberFormatOptions): string; (locales?: Intl.LocalesArgument, options?: Intl.NumberFormatOptions): string; }"
+        },
+        "reloadProperties": {
+          "bypassCache?": "boolean"
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/tabs#method-reload"
+    },
+    "tabs.duplicate": {
+      "signatures": [
+        "(tabId: number): Promise<Tab | undefined>"
+      ],
+      "parameters": {
+        "tabId": {
+          "toString": "(radix?: number) => string",
+          "toFixed": "(fractionDigits?: number) => string",
+          "toExponential": "(fractionDigits?: number) => string",
+          "toPrecision": "(precision?: number) => string",
+          "valueOf": "() => number",
+          "toLocaleString": "{ (locales?: string | string[], options?: Intl.NumberFormatOptions): string; (locales?: Intl.LocalesArgument, options?: Intl.NumberFormatOptions): string; }"
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/tabs#method-duplicate"
+    },
+    "tabs.sendMessage": {
+      "signatures": [
+        "<M = any, R = any>(tabId: number, message: M, options?: MessageSendOptions): Promise<R>"
+      ],
+      "parameters": {
+        "tabId": {
+          "toString": "(radix?: number) => string",
+          "toFixed": "(fractionDigits?: number) => string",
+          "toExponential": "(fractionDigits?: number) => string",
+          "toPrecision": "(precision?: number) => string",
+          "valueOf": "() => number",
+          "toLocaleString": "{ (locales?: string | string[], options?: Intl.NumberFormatOptions): string; (locales?: Intl.LocalesArgument, options?: Intl.NumberFormatOptions): string; }"
+        },
+        "options": {
+          "frameId?": "number",
+          "documentId?": "string"
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/tabs#method-sendMessage"
+    },
+    "tabs.sendRequest": {
+      "signatures": [
+        "<Request = any, Response = any>(tabId: number, request: Request): Promise<Response>"
+      ],
+      "parameters": {
+        "tabId": {
+          "toString": "(radix?: number) => string",
+          "toFixed": "(fractionDigits?: number) => string",
+          "toExponential": "(fractionDigits?: number) => string",
+          "toPrecision": "(precision?: number) => string",
+          "valueOf": "() => number",
+          "toLocaleString": "{ (locales?: string | string[], options?: Intl.NumberFormatOptions): string; (locales?: Intl.LocalesArgument, options?: Intl.NumberFormatOptions): string; }"
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/tabs#method-sendRequest"
+    },
+    "tabs.connect": {
+      "signatures": [
+        "(tabId: number, connectInfo?: ConnectInfo): runtime.Port"
+      ],
+      "parameters": {
+        "tabId": {
+          "toString": "(radix?: number) => string",
+          "toFixed": "(fractionDigits?: number) => string",
+          "toExponential": "(fractionDigits?: number) => string",
+          "toPrecision": "(precision?: number) => string",
+          "valueOf": "() => number",
+          "toLocaleString": "{ (locales?: string | string[], options?: Intl.NumberFormatOptions): string; (locales?: Intl.LocalesArgument, options?: Intl.NumberFormatOptions): string; }"
+        },
+        "connectInfo": {
+          "name?": "string",
+          "frameId?": "number",
+          "documentId?": "string"
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/tabs#method-connect"
+    },
+    "tabs.insertCSS": {
+      "signatures": [
+        "(details: extensionTypes.InjectDetails): Promise<void>",
+        "(tabId: number | undefined, details: extensionTypes.InjectDetails): Promise<void>"
+      ],
+      "parameters": {
+        "details": {
+          "allFrames?": "boolean",
+          "code?": "string",
+          "cssOrigin?": "CSSOrigin",
+          "file?": "string",
+          "frameId?": "number",
+          "matchAboutBlank?": "boolean",
+          "runAt?": "RunAt"
+        },
+        "tabId": {
+          "toString": "(radix?: number) => string",
+          "toFixed": "(fractionDigits?: number) => string",
+          "toExponential": "(fractionDigits?: number) => string",
+          "toPrecision": "(precision?: number) => string",
+          "valueOf": "() => number",
+          "toLocaleString": "{ (locales?: string | string[], options?: Intl.NumberFormatOptions): string; (locales?: Intl.LocalesArgument, options?: Intl.NumberFormatOptions): string; }"
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/tabs#method-insertCSS"
+    },
+    "tabs.removeCSS": {
+      "signatures": [
+        "(details: extensionTypes.DeleteInjectionDetails): Promise<void>",
+        "(tabId: number | undefined, details: extensionTypes.DeleteInjectionDetails): Promise<void>"
+      ],
+      "parameters": {
+        "details": {
+          "allFrames?": "boolean",
+          "code?": "string",
+          "cssOrigin?": "CSSOrigin",
+          "file?": "string",
+          "frameId?": "number",
+          "matchAboutBlank?": "boolean"
+        },
+        "tabId": {
+          "toString": "(radix?: number) => string",
+          "toFixed": "(fractionDigits?: number) => string",
+          "toExponential": "(fractionDigits?: number) => string",
+          "toPrecision": "(precision?: number) => string",
+          "valueOf": "() => number",
+          "toLocaleString": "{ (locales?: string | string[], options?: Intl.NumberFormatOptions): string; (locales?: Intl.LocalesArgument, options?: Intl.NumberFormatOptions): string; }"
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/tabs#method-removeCSS"
+    },
+    "tabs.highlight": {
+      "signatures": [
+        "(highlightInfo: HighlightInfo): Promise<windows.Window>"
+      ],
+      "parameters": {
+        "highlightInfo": {
+          "tabs": "number | number[]",
+          "windowId?": "number"
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/tabs#method-highlight"
+    },
+    "tabs.query": {
+      "signatures": [
+        "(queryInfo: QueryInfo): Promise<Tab[]>"
+      ],
+      "parameters": {
+        "queryInfo": {
+          "status?": "\"unloaded\" | \"loading\" | \"complete\"",
+          "lastFocusedWindow?": "boolean",
+          "windowId?": "number",
+          "windowType?": "\"normal\" | \"popup\" | \"panel\" | \"app\" | \"devtools\"",
+          "active?": "boolean",
+          "index?": "number",
+          "title?": "string",
+          "url?": "string | string[]",
+          "currentWindow?": "boolean",
+          "highlighted?": "boolean",
+          "discarded?": "boolean",
+          "frozen?": "boolean",
+          "autoDiscardable?": "boolean",
+          "pinned?": "boolean",
+          "splitViewId?": "number",
+          "audible?": "boolean",
+          "muted?": "boolean",
+          "groupId?": "number"
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/tabs#method-query"
+    },
+    "tabs.detectLanguage": {
+      "signatures": [
+        "(tabId?: number): Promise<string>"
+      ],
+      "parameters": {
+        "tabId": {
+          "toString": "(radix?: number) => string",
+          "toFixed": "(fractionDigits?: number) => string",
+          "toExponential": "(fractionDigits?: number) => string",
+          "toPrecision": "(precision?: number) => string",
+          "valueOf": "() => number",
+          "toLocaleString": "{ (locales?: string | string[], options?: Intl.NumberFormatOptions): string; (locales?: Intl.LocalesArgument, options?: Intl.NumberFormatOptions): string; }"
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/tabs#method-detectLanguage"
+    },
+    "tabs.setZoom": {
+      "signatures": [
+        "(zoomFactor: number): Promise<void>",
+        "(tabId: number | undefined, zoomFactor: number): Promise<void>"
+      ],
+      "parameters": {
+        "zoomFactor": {
+          "toString": "(radix?: number) => string",
+          "toFixed": "(fractionDigits?: number) => string",
+          "toExponential": "(fractionDigits?: number) => string",
+          "toPrecision": "(precision?: number) => string",
+          "valueOf": "() => number",
+          "toLocaleString": "{ (locales?: string | string[], options?: Intl.NumberFormatOptions): string; (locales?: Intl.LocalesArgument, options?: Intl.NumberFormatOptions): string; }"
+        },
+        "tabId": {
+          "toString": "(radix?: number) => string",
+          "toFixed": "(fractionDigits?: number) => string",
+          "toExponential": "(fractionDigits?: number) => string",
+          "toPrecision": "(precision?: number) => string",
+          "valueOf": "() => number",
+          "toLocaleString": "{ (locales?: string | string[], options?: Intl.NumberFormatOptions): string; (locales?: Intl.LocalesArgument, options?: Intl.NumberFormatOptions): string; }"
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/tabs#method-setZoom"
+    },
+    "tabs.getZoom": {
+      "signatures": [
+        "(tabId?: number): Promise<number>"
+      ],
+      "parameters": {
+        "tabId": {
+          "toString": "(radix?: number) => string",
+          "toFixed": "(fractionDigits?: number) => string",
+          "toExponential": "(fractionDigits?: number) => string",
+          "toPrecision": "(precision?: number) => string",
+          "valueOf": "() => number",
+          "toLocaleString": "{ (locales?: string | string[], options?: Intl.NumberFormatOptions): string; (locales?: Intl.LocalesArgument, options?: Intl.NumberFormatOptions): string; }"
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/tabs#method-getZoom"
+    },
+    "tabs.setZoomSettings": {
+      "signatures": [
+        "(zoomSettings: ZoomSettings): Promise<void>",
+        "(tabId: number | undefined, zoomSettings: ZoomSettings): Promise<void>"
+      ],
+      "parameters": {
+        "zoomSettings": {
+          "mode?": "\"automatic\" | \"manual\" | \"disabled\"",
+          "scope?": "\"per-origin\" | \"per-tab\"",
+          "defaultZoomFactor?": "number"
+        },
+        "tabId": {
+          "toString": "(radix?: number) => string",
+          "toFixed": "(fractionDigits?: number) => string",
+          "toExponential": "(fractionDigits?: number) => string",
+          "toPrecision": "(precision?: number) => string",
+          "valueOf": "() => number",
+          "toLocaleString": "{ (locales?: string | string[], options?: Intl.NumberFormatOptions): string; (locales?: Intl.LocalesArgument, options?: Intl.NumberFormatOptions): string; }"
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/tabs#method-setZoomSettings"
+    },
+    "tabs.getZoomSettings": {
+      "signatures": [
+        "(tabId?: number): Promise<ZoomSettings>"
+      ],
+      "parameters": {
+        "tabId": {
+          "toString": "(radix?: number) => string",
+          "toFixed": "(fractionDigits?: number) => string",
+          "toExponential": "(fractionDigits?: number) => string",
+          "toPrecision": "(precision?: number) => string",
+          "valueOf": "() => number",
+          "toLocaleString": "{ (locales?: string | string[], options?: Intl.NumberFormatOptions): string; (locales?: Intl.LocalesArgument, options?: Intl.NumberFormatOptions): string; }"
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/tabs#method-getZoomSettings"
+    },
+    "tabs.discard": {
+      "signatures": [
+        "(tabId?: number): Promise<Tab | undefined>"
+      ],
+      "parameters": {
+        "tabId": {
+          "toString": "(radix?: number) => string",
+          "toFixed": "(fractionDigits?: number) => string",
+          "toExponential": "(fractionDigits?: number) => string",
+          "toPrecision": "(precision?: number) => string",
+          "valueOf": "() => number",
+          "toLocaleString": "{ (locales?: string | string[], options?: Intl.NumberFormatOptions): string; (locales?: Intl.LocalesArgument, options?: Intl.NumberFormatOptions): string; }"
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/tabs#method-discard"
+    },
+    "tabs.goForward": {
+      "signatures": [
+        "(tabId?: number): Promise<void>"
+      ],
+      "parameters": {
+        "tabId": {
+          "toString": "(radix?: number) => string",
+          "toFixed": "(fractionDigits?: number) => string",
+          "toExponential": "(fractionDigits?: number) => string",
+          "toPrecision": "(precision?: number) => string",
+          "valueOf": "() => number",
+          "toLocaleString": "{ (locales?: string | string[], options?: Intl.NumberFormatOptions): string; (locales?: Intl.LocalesArgument, options?: Intl.NumberFormatOptions): string; }"
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/tabs#method-goForward"
+    },
+    "tabs.goBack": {
+      "signatures": [
+        "(tabId?: number): Promise<void>"
+      ],
+      "parameters": {
+        "tabId": {
+          "toString": "(radix?: number) => string",
+          "toFixed": "(fractionDigits?: number) => string",
+          "toExponential": "(fractionDigits?: number) => string",
+          "toPrecision": "(precision?: number) => string",
+          "valueOf": "() => number",
+          "toLocaleString": "{ (locales?: string | string[], options?: Intl.NumberFormatOptions): string; (locales?: Intl.LocalesArgument, options?: Intl.NumberFormatOptions): string; }"
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/tabs#method-goBack"
+    },
+    "tabs.group": {
+      "signatures": [
+        "(options: GroupOptions): Promise<number>"
+      ],
+      "parameters": {
+        "options": {
+          "createProperties?": "{ windowId?: number | undefined; }",
+          "groupId?": "number",
+          "tabIds?": "number | [number, ...number[]]"
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/tabs#method-group"
+    },
+    "tabs.ungroup": {
+      "signatures": [
+        "(tabIds: number | [number, ...number[]]): Promise<void>"
+      ],
+      "parameters": {
+        "tabIds": {
+          "toString": "((radix?: number) => string) | (() => string)",
+          "valueOf": "(() => number) | (() => Object)",
+          "toLocaleString": "{ (locales?: string | string[], options?: Intl.NumberFormatOptions): string; (locales?: Intl.LocalesArgument, options?: Intl.NumberFormatOptions): string; } | { (): string; (locales: string | string[], options?: Intl.NumberFormatOptions & Intl.DateTimeFormatOptions): string; }"
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/tabs#method-ungroup"
+    },
+    "windows.get": {
+      "signatures": [
+        "(windowId: number, queryOptions?: QueryOptions): Promise<Window>"
+      ],
+      "parameters": {
+        "windowId": {
+          "toString": "(radix?: number) => string",
+          "toFixed": "(fractionDigits?: number) => string",
+          "toExponential": "(fractionDigits?: number) => string",
+          "toPrecision": "(precision?: number) => string",
+          "valueOf": "() => number",
+          "toLocaleString": "{ (locales?: string | string[], options?: Intl.NumberFormatOptions): string; (locales?: Intl.LocalesArgument, options?: Intl.NumberFormatOptions): string; }"
+        },
+        "queryOptions": {
+          "populate?": "boolean",
+          "windowTypes?": "(\"normal\" | \"popup\" | \"panel\" | \"app\" | \"devtools\")[]"
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/windows#method-get"
+    },
+    "windows.getCurrent": {
+      "signatures": [
+        "(queryOptions?: QueryOptions): Promise<Window>"
+      ],
+      "parameters": {
+        "queryOptions": {
+          "populate?": "boolean",
+          "windowTypes?": "(\"normal\" | \"popup\" | \"panel\" | \"app\" | \"devtools\")[]"
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/windows#method-getCurrent"
+    },
+    "windows.create": {
+      "signatures": [
+        "(createData?: CreateData): Promise<Window | undefined>"
+      ],
+      "parameters": {
+        "createData": {
+          "tabId?": "number",
+          "url?": "string | string[]",
+          "top?": "number",
+          "height?": "number",
+          "width?": "number",
+          "focused?": "boolean",
+          "incognito?": "boolean",
+          "type?": "\"normal\" | \"popup\" | \"panel\"",
+          "left?": "number",
+          "state?": "\"normal\" | \"minimized\" | \"maximized\" | \"fullscreen\" | \"locked-fullscreen\"",
+          "setSelfAsOpener?": "boolean"
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/windows#method-create"
+    },
+    "windows.getAll": {
+      "signatures": [
+        "(queryOptions?: QueryOptions): Promise<Window[]>"
+      ],
+      "parameters": {
+        "queryOptions": {
+          "populate?": "boolean",
+          "windowTypes?": "(\"normal\" | \"popup\" | \"panel\" | \"app\" | \"devtools\")[]"
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/windows#method-getAll"
+    },
+    "windows.update": {
+      "signatures": [
+        "(windowId: number, updateInfo: UpdateInfo): Promise<Window>"
+      ],
+      "parameters": {
+        "windowId": {
+          "toString": "(radix?: number) => string",
+          "toFixed": "(fractionDigits?: number) => string",
+          "toExponential": "(fractionDigits?: number) => string",
+          "toPrecision": "(precision?: number) => string",
+          "valueOf": "() => number",
+          "toLocaleString": "{ (locales?: string | string[], options?: Intl.NumberFormatOptions): string; (locales?: Intl.LocalesArgument, options?: Intl.NumberFormatOptions): string; }"
+        },
+        "updateInfo": {
+          "top?": "number",
+          "drawAttention?": "boolean",
+          "height?": "number",
+          "width?": "number",
+          "state?": "\"normal\" | \"minimized\" | \"maximized\" | \"fullscreen\" | \"locked-fullscreen\"",
+          "focused?": "boolean",
+          "left?": "number"
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/windows#method-update"
+    },
+    "windows.remove": {
+      "signatures": [
+        "(windowId: number): Promise<void>"
+      ],
+      "parameters": {
+        "windowId": {
+          "toString": "(radix?: number) => string",
+          "toFixed": "(fractionDigits?: number) => string",
+          "toExponential": "(fractionDigits?: number) => string",
+          "toPrecision": "(precision?: number) => string",
+          "valueOf": "() => number",
+          "toLocaleString": "{ (locales?: string | string[], options?: Intl.NumberFormatOptions): string; (locales?: Intl.LocalesArgument, options?: Intl.NumberFormatOptions): string; }"
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/windows#method-remove"
+    },
+    "windows.getLastFocused": {
+      "signatures": [
+        "(queryOptions?: QueryOptions): Promise<Window>"
+      ],
+      "parameters": {
+        "queryOptions": {
+          "populate?": "boolean",
+          "windowTypes?": "(\"normal\" | \"popup\" | \"panel\" | \"app\" | \"devtools\")[]"
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/windows#method-getLastFocused"
+    },
+    "tabGroups.get": {
+      "signatures": [
+        "(groupId: number): Promise<TabGroup>"
+      ],
+      "parameters": {
+        "groupId": {
+          "toString": "(radix?: number) => string",
+          "toFixed": "(fractionDigits?: number) => string",
+          "toExponential": "(fractionDigits?: number) => string",
+          "toPrecision": "(precision?: number) => string",
+          "valueOf": "() => number",
+          "toLocaleString": "{ (locales?: string | string[], options?: Intl.NumberFormatOptions): string; (locales?: Intl.LocalesArgument, options?: Intl.NumberFormatOptions): string; }"
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/tabGroups#method-get"
+    },
+    "tabGroups.move": {
+      "signatures": [
+        "(groupId: number, moveProperties: MoveProperties): Promise<TabGroup | undefined>"
+      ],
+      "parameters": {
+        "groupId": {
+          "toString": "(radix?: number) => string",
+          "toFixed": "(fractionDigits?: number) => string",
+          "toExponential": "(fractionDigits?: number) => string",
+          "toPrecision": "(precision?: number) => string",
+          "valueOf": "() => number",
+          "toLocaleString": "{ (locales?: string | string[], options?: Intl.NumberFormatOptions): string; (locales?: Intl.LocalesArgument, options?: Intl.NumberFormatOptions): string; }"
+        },
+        "moveProperties": {
+          "index": "number",
+          "windowId?": "number"
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/tabGroups#method-move"
+    },
+    "tabGroups.query": {
+      "signatures": [
+        "(queryInfo: QueryInfo): Promise<TabGroup[]>"
+      ],
+      "parameters": {
+        "queryInfo": {
+          "collapsed?": "boolean",
+          "color?": "\"blue\" | \"cyan\" | \"green\" | \"grey\" | \"orange\" | \"pink\" | \"purple\" | \"red\" | \"yellow\"",
+          "shared?": "boolean",
+          "title?": "string",
+          "windowId?": "number"
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/tabGroups#method-query"
+    },
+    "tabGroups.update": {
+      "signatures": [
+        "(groupId: number, updateProperties: UpdateProperties): Promise<TabGroup | undefined>"
+      ],
+      "parameters": {
+        "groupId": {
+          "toString": "(radix?: number) => string",
+          "toFixed": "(fractionDigits?: number) => string",
+          "toExponential": "(fractionDigits?: number) => string",
+          "toPrecision": "(precision?: number) => string",
+          "valueOf": "() => number",
+          "toLocaleString": "{ (locales?: string | string[], options?: Intl.NumberFormatOptions): string; (locales?: Intl.LocalesArgument, options?: Intl.NumberFormatOptions): string; }"
+        },
+        "updateProperties": {
+          "collapsed?": "boolean",
+          "color?": "\"blue\" | \"cyan\" | \"green\" | \"grey\" | \"orange\" | \"pink\" | \"purple\" | \"red\" | \"yellow\"",
+          "title?": "string"
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/tabGroups#method-update"
+    },
+    "downloads.search": {
+      "signatures": [
+        "(query: DownloadQuery): Promise<DownloadItem[]>"
+      ],
+      "parameters": {
+        "query": {
+          "orderBy?": "string[]",
+          "urlRegex?": "string",
+          "endedBefore?": "string",
+          "totalBytesGreater?": "number",
+          "danger?": "\"file\" | \"url\" | \"content\" | \"uncommon\" | \"host\" | \"unwanted\" | \"safe\" | \"accepted\" | \"allowlistedByPolicy\" | \"asyncScanning\" | \"asyncLocalPasswordScanning\" | \"passwordProtected\" | \"blockedTooLarge\" | \"sensitiveContentWarning\" | \"sensitiveContentBlock\" | \"deepScannedFailed\" | \"deepScannedSafe\" | \"deepScannedOpenedDangerous\" | \"promptForScanning\" | \"promptForLocalPasswordScanning\" | \"accountCompromise\" | \"blockedScanFailed\" | \"forceSaveToGdrive\" | \"forceSaveToOnedrive\"",
+          "totalBytes?": "number",
+          "paused?": "boolean",
+          "filenameRegex?": "string",
+          "finalUrl?": "string",
+          "finalUrlRegex?": "string",
+          "query?": "string[]",
+          "totalBytesLess?": "number",
+          "id?": "number",
+          "bytesReceived?": "number",
+          "endedAfter?": "string",
+          "filename?": "string",
+          "state?": "\"complete\" | \"in_progress\" | \"interrupted\"",
+          "startedAfter?": "string",
+          "mime?": "string",
+          "fileSize?": "number",
+          "startTime?": "string",
+          "url?": "string",
+          "startedBefore?": "string",
+          "limit?": "number",
+          "error?": "\"FILE_FAILED\" | \"FILE_ACCESS_DENIED\" | \"FILE_NO_SPACE\" | \"FILE_NAME_TOO_LONG\" | \"FILE_TOO_LARGE\" | \"FILE_VIRUS_INFECTED\" | \"FILE_TRANSIENT_ERROR\" | \"FILE_BLOCKED\" | \"FILE_SECURITY_CHECK_FAILED\" | \"FILE_TOO_SHORT\" | \"FILE_HASH_MISMATCH\" | \"FILE_SAME_AS_SOURCE\" | \"NETWORK_FAILED\" | \"NETWORK_TIMEOUT\" | \"NETWORK_DISCONNECTED\" | \"NETWORK_SERVER_DOWN\" | \"NETWORK_INVALID_REQUEST\" | \"SERVER_FAILED\" | \"SERVER_NO_RANGE\" | \"SERVER_BAD_CONTENT\" | \"SERVER_UNAUTHORIZED\" | \"SERVER_CERT_PROBLEM\" | \"SERVER_FORBIDDEN\" | \"SERVER_UNREACHABLE\" | \"SERVER_CONTENT_LENGTH_MISMATCH\" | \"SERVER_CROSS_ORIGIN_REDIRECT\" | \"USER_CANCELED\" | \"USER_SHUTDOWN\" | \"CRASH\"",
+          "endTime?": "string",
+          "exists?": "boolean"
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/downloads#method-search"
+    },
+    "downloads.pause": {
+      "signatures": [
+        "(downloadId: number): Promise<void>"
+      ],
+      "parameters": {
+        "downloadId": {
+          "toString": "(radix?: number) => string",
+          "toFixed": "(fractionDigits?: number) => string",
+          "toExponential": "(fractionDigits?: number) => string",
+          "toPrecision": "(precision?: number) => string",
+          "valueOf": "() => number",
+          "toLocaleString": "{ (locales?: string | string[], options?: Intl.NumberFormatOptions): string; (locales?: Intl.LocalesArgument, options?: Intl.NumberFormatOptions): string; }"
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/downloads#method-pause"
+    },
+    "downloads.getFileIcon": {
+      "signatures": [
+        "(downloadId: number, options?: GetFileIconOptions): Promise<string | undefined>"
+      ],
+      "parameters": {
+        "downloadId": {
+          "toString": "(radix?: number) => string",
+          "toFixed": "(fractionDigits?: number) => string",
+          "toExponential": "(fractionDigits?: number) => string",
+          "toPrecision": "(precision?: number) => string",
+          "valueOf": "() => number",
+          "toLocaleString": "{ (locales?: string | string[], options?: Intl.NumberFormatOptions): string; (locales?: Intl.LocalesArgument, options?: Intl.NumberFormatOptions): string; }"
+        },
+        "options": {
+          "size?": "16 | 32"
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/downloads#method-getFileIcon"
+    },
+    "downloads.resume": {
+      "signatures": [
+        "(downloadId: number): Promise<void>"
+      ],
+      "parameters": {
+        "downloadId": {
+          "toString": "(radix?: number) => string",
+          "toFixed": "(fractionDigits?: number) => string",
+          "toExponential": "(fractionDigits?: number) => string",
+          "toPrecision": "(precision?: number) => string",
+          "valueOf": "() => number",
+          "toLocaleString": "{ (locales?: string | string[], options?: Intl.NumberFormatOptions): string; (locales?: Intl.LocalesArgument, options?: Intl.NumberFormatOptions): string; }"
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/downloads#method-resume"
+    },
+    "downloads.cancel": {
+      "signatures": [
+        "(downloadId: number): Promise<void>"
+      ],
+      "parameters": {
+        "downloadId": {
+          "toString": "(radix?: number) => string",
+          "toFixed": "(fractionDigits?: number) => string",
+          "toExponential": "(fractionDigits?: number) => string",
+          "toPrecision": "(precision?: number) => string",
+          "valueOf": "() => number",
+          "toLocaleString": "{ (locales?: string | string[], options?: Intl.NumberFormatOptions): string; (locales?: Intl.LocalesArgument, options?: Intl.NumberFormatOptions): string; }"
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/downloads#method-cancel"
+    },
+    "downloads.download": {
+      "signatures": [
+        "(options: DownloadOptions): Promise<number>"
+      ],
+      "parameters": {
+        "options": {
+          "body?": "string",
+          "saveAs?": "boolean",
+          "url": "string",
+          "filename?": "string",
+          "headers?": "HeaderNameValuePair[]",
+          "method?": "\"GET\" | \"POST\"",
+          "conflictAction?": "\"uniquify\" | \"overwrite\" | \"prompt\""
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/downloads#method-download"
+    },
+    "downloads.open": {
+      "signatures": [
+        "(downloadId: number): Promise<void>"
+      ],
+      "parameters": {
+        "downloadId": {
+          "toString": "(radix?: number) => string",
+          "toFixed": "(fractionDigits?: number) => string",
+          "toExponential": "(fractionDigits?: number) => string",
+          "toPrecision": "(precision?: number) => string",
+          "valueOf": "() => number",
+          "toLocaleString": "{ (locales?: string | string[], options?: Intl.NumberFormatOptions): string; (locales?: Intl.LocalesArgument, options?: Intl.NumberFormatOptions): string; }"
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/downloads#method-open"
+    },
+    "downloads.show": {
+      "signatures": [
+        "(downloadId: number): void"
+      ],
+      "parameters": {
+        "downloadId": {
+          "toString": "(radix?: number) => string",
+          "toFixed": "(fractionDigits?: number) => string",
+          "toExponential": "(fractionDigits?: number) => string",
+          "toPrecision": "(precision?: number) => string",
+          "valueOf": "() => number",
+          "toLocaleString": "{ (locales?: string | string[], options?: Intl.NumberFormatOptions): string; (locales?: Intl.LocalesArgument, options?: Intl.NumberFormatOptions): string; }"
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/downloads#method-show"
+    },
+    "downloads.showDefaultFolder": {
+      "signatures": [
+        "(): void"
+      ],
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/downloads#method-showDefaultFolder"
+    },
+    "downloads.erase": {
+      "signatures": [
+        "(query: DownloadQuery): Promise<number[]>"
+      ],
+      "parameters": {
+        "query": {
+          "orderBy?": "string[]",
+          "urlRegex?": "string",
+          "endedBefore?": "string",
+          "totalBytesGreater?": "number",
+          "danger?": "\"file\" | \"url\" | \"content\" | \"uncommon\" | \"host\" | \"unwanted\" | \"safe\" | \"accepted\" | \"allowlistedByPolicy\" | \"asyncScanning\" | \"asyncLocalPasswordScanning\" | \"passwordProtected\" | \"blockedTooLarge\" | \"sensitiveContentWarning\" | \"sensitiveContentBlock\" | \"deepScannedFailed\" | \"deepScannedSafe\" | \"deepScannedOpenedDangerous\" | \"promptForScanning\" | \"promptForLocalPasswordScanning\" | \"accountCompromise\" | \"blockedScanFailed\" | \"forceSaveToGdrive\" | \"forceSaveToOnedrive\"",
+          "totalBytes?": "number",
+          "paused?": "boolean",
+          "filenameRegex?": "string",
+          "finalUrl?": "string",
+          "finalUrlRegex?": "string",
+          "query?": "string[]",
+          "totalBytesLess?": "number",
+          "id?": "number",
+          "bytesReceived?": "number",
+          "endedAfter?": "string",
+          "filename?": "string",
+          "state?": "\"complete\" | \"in_progress\" | \"interrupted\"",
+          "startedAfter?": "string",
+          "mime?": "string",
+          "fileSize?": "number",
+          "startTime?": "string",
+          "url?": "string",
+          "startedBefore?": "string",
+          "limit?": "number",
+          "error?": "\"FILE_FAILED\" | \"FILE_ACCESS_DENIED\" | \"FILE_NO_SPACE\" | \"FILE_NAME_TOO_LONG\" | \"FILE_TOO_LARGE\" | \"FILE_VIRUS_INFECTED\" | \"FILE_TRANSIENT_ERROR\" | \"FILE_BLOCKED\" | \"FILE_SECURITY_CHECK_FAILED\" | \"FILE_TOO_SHORT\" | \"FILE_HASH_MISMATCH\" | \"FILE_SAME_AS_SOURCE\" | \"NETWORK_FAILED\" | \"NETWORK_TIMEOUT\" | \"NETWORK_DISCONNECTED\" | \"NETWORK_SERVER_DOWN\" | \"NETWORK_INVALID_REQUEST\" | \"SERVER_FAILED\" | \"SERVER_NO_RANGE\" | \"SERVER_BAD_CONTENT\" | \"SERVER_UNAUTHORIZED\" | \"SERVER_CERT_PROBLEM\" | \"SERVER_FORBIDDEN\" | \"SERVER_UNREACHABLE\" | \"SERVER_CONTENT_LENGTH_MISMATCH\" | \"SERVER_CROSS_ORIGIN_REDIRECT\" | \"USER_CANCELED\" | \"USER_SHUTDOWN\" | \"CRASH\"",
+          "endTime?": "string",
+          "exists?": "boolean"
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/downloads#method-erase"
+    },
+    "downloads.removeFile": {
+      "signatures": [
+        "(downloadId: number): Promise<void>"
+      ],
+      "parameters": {
+        "downloadId": {
+          "toString": "(radix?: number) => string",
+          "toFixed": "(fractionDigits?: number) => string",
+          "toExponential": "(fractionDigits?: number) => string",
+          "toPrecision": "(precision?: number) => string",
+          "valueOf": "() => number",
+          "toLocaleString": "{ (locales?: string | string[], options?: Intl.NumberFormatOptions): string; (locales?: Intl.LocalesArgument, options?: Intl.NumberFormatOptions): string; }"
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/downloads#method-removeFile"
+    },
+    "downloads.acceptDanger": {
+      "signatures": [
+        "(downloadId: number): Promise<void>"
+      ],
+      "parameters": {
+        "downloadId": {
+          "toString": "(radix?: number) => string",
+          "toFixed": "(fractionDigits?: number) => string",
+          "toExponential": "(fractionDigits?: number) => string",
+          "toPrecision": "(precision?: number) => string",
+          "valueOf": "() => number",
+          "toLocaleString": "{ (locales?: string | string[], options?: Intl.NumberFormatOptions): string; (locales?: Intl.LocalesArgument, options?: Intl.NumberFormatOptions): string; }"
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/downloads#method-acceptDanger"
+    },
+    "downloads.setShelfEnabled": {
+      "signatures": [
+        "(enabled: boolean): void"
+      ],
+      "parameters": {
+        "enabled": {
+          "valueOf": "() => boolean"
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/downloads#method-setShelfEnabled"
+    },
+    "downloads.setUiOptions": {
+      "signatures": [
+        "(options: UiOptions): Promise<void>"
+      ],
+      "parameters": {
+        "options": {
+          "enabled": "boolean"
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/downloads#method-setUiOptions"
+    },
+    "cookies.getAllCookieStores": {
+      "signatures": [
+        "(): Promise<CookieStore[]>"
+      ],
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/cookies#method-getAllCookieStores"
+    },
+    "cookies.getPartitionKey": {
+      "signatures": [
+        "(details: FrameDetails): Promise<{ partitionKey: CookiePartitionKey; }>"
+      ],
+      "parameters": {
+        "details": {
+          "documentId?": "string",
+          "frameId?": "number",
+          "tabId?": "number"
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/cookies#method-getPartitionKey"
+    },
+    "cookies.getAll": {
+      "signatures": [
+        "(details: GetAllDetails): Promise<Cookie[]>"
+      ],
+      "parameters": {
+        "details": {
+          "domain?": "string",
+          "name?": "string",
+          "partitionKey?": "CookiePartitionKey",
+          "url?": "string",
+          "storeId?": "string",
+          "session?": "boolean",
+          "path?": "string",
+          "secure?": "boolean"
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/cookies#method-getAll"
+    },
+    "cookies.set": {
+      "signatures": [
+        "(details: SetDetails): Promise<Cookie | null>"
+      ],
+      "parameters": {
+        "details": {
+          "domain?": "string",
+          "name?": "string",
+          "partitionKey?": "CookiePartitionKey",
+          "url": "string",
+          "storeId?": "string",
+          "value?": "string",
+          "expirationDate?": "number",
+          "path?": "string",
+          "httpOnly?": "boolean",
+          "secure?": "boolean",
+          "sameSite?": "\"no_restriction\" | \"lax\" | \"strict\" | \"unspecified\""
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/cookies#method-set"
+    },
+    "cookies.remove": {
+      "signatures": [
+        "(details: CookieDetails): Promise<CookieDetails>"
+      ],
+      "parameters": {
+        "details": {
+          "name": "string",
+          "partitionKey?": "CookiePartitionKey",
+          "storeId?": "string",
+          "url": "string"
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/cookies#method-remove"
+    },
+    "cookies.get": {
+      "signatures": [
+        "(details: CookieDetails): Promise<Cookie | null>"
+      ],
+      "parameters": {
+        "details": {
+          "name": "string",
+          "partitionKey?": "CookiePartitionKey",
+          "storeId?": "string",
+          "url": "string"
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/cookies#method-get"
+    },
+    "bookmarks.create": {
+      "signatures": [
+        "(bookmark: CreateDetails): Promise<BookmarkTreeNode>"
+      ],
+      "parameters": {
+        "bookmark": {
+          "index?": "number",
+          "parentId?": "string",
+          "title?": "string",
+          "url?": "string"
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/bookmarks#method-create"
+    },
+    "bookmarks.get": {
+      "signatures": [
+        "(idOrIdList: string | [string, ...string[]]): Promise<BookmarkTreeNode[]>"
+      ],
+      "parameters": {
+        "idOrIdList": {
+          "0": "string",
+          "toString": "(() => string) | (() => string)",
+          "concat": "((...strings: string[]) => string) | { (...items: ConcatArray<string>[]): string[]; (...items: (string | ConcatArray<string>)[]): string[]; }",
+          "indexOf": "((searchString: string, position?: number) => number) | ((searchElement: string, fromIndex?: number) => number)",
+          "lastIndexOf": "((searchString: string, position?: number) => number) | ((searchElement: string, fromIndex?: number) => number)",
+          "slice": "((start?: number, end?: number) => string) | ((start?: number, end?: number) => string[])",
+          "length": "number",
+          "valueOf": "(() => Object) | (() => string)",
+          "includes": "((searchString: string, position?: number) => boolean) | ((searchElement: string, fromIndex?: number) => boolean)",
+          "at": "(index: number) => string",
+          "toLocaleString": "(() => string) | { (): string; (locales: string | string[], options?: Intl.NumberFormatOptions & Intl.DateTimeFormatOptions): string; }"
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/bookmarks#method-get"
+    },
+    "bookmarks.getChildren": {
+      "signatures": [
+        "(id: string): Promise<BookmarkTreeNode[]>"
+      ],
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/bookmarks#method-getChildren"
+    },
+    "bookmarks.getRecent": {
+      "signatures": [
+        "(numberOfItems: number): Promise<BookmarkTreeNode[]>"
+      ],
+      "parameters": {
+        "numberOfItems": {
+          "toString": "(radix?: number) => string",
+          "toFixed": "(fractionDigits?: number) => string",
+          "toExponential": "(fractionDigits?: number) => string",
+          "toPrecision": "(precision?: number) => string",
+          "valueOf": "() => number",
+          "toLocaleString": "{ (locales?: string | string[], options?: Intl.NumberFormatOptions): string; (locales?: Intl.LocalesArgument, options?: Intl.NumberFormatOptions): string; }"
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/bookmarks#method-getRecent"
+    },
+    "bookmarks.getSubTree": {
+      "signatures": [
+        "(id: string): Promise<BookmarkTreeNode[]>"
+      ],
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/bookmarks#method-getSubTree"
+    },
+    "bookmarks.getTree": {
+      "signatures": [
+        "(): Promise<BookmarkTreeNode[]>"
+      ],
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/bookmarks#method-getTree"
+    },
+    "bookmarks.move": {
+      "signatures": [
+        "(id: string, destination: MoveDestination): Promise<BookmarkTreeNode>"
+      ],
+      "parameters": {
+        "destination": {
+          "parentId?": "string",
+          "index?": "number"
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/bookmarks#method-move"
+    },
+    "bookmarks.remove": {
+      "signatures": [
+        "(id: string): Promise<void>"
+      ],
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/bookmarks#method-remove"
+    },
+    "bookmarks.removeTree": {
+      "signatures": [
+        "(id: string): Promise<void>"
+      ],
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/bookmarks#method-removeTree"
+    },
+    "bookmarks.search": {
+      "signatures": [
+        "(query: string | SearchQuery): Promise<BookmarkTreeNode[]>"
+      ],
+      "parameters": {
+        "query": {
+          "toString": "(() => string) | (() => string)",
+          "valueOf": "(() => Object) | (() => string)"
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/bookmarks#method-search"
+    },
+    "bookmarks.update": {
+      "signatures": [
+        "(id: string, changes: UpdateChanges): Promise<BookmarkTreeNode>"
+      ],
+      "parameters": {
+        "changes": {
+          "title?": "string",
+          "url?": "string"
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/bookmarks#method-update"
+    },
+    "history.search": {
+      "signatures": [
+        "(query: HistoryQuery): Promise<HistoryItem[]>"
+      ],
+      "parameters": {
+        "query": {
+          "text": "string",
+          "maxResults?": "number",
+          "startTime?": "number",
+          "endTime?": "number"
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/history#method-search"
+    },
+    "history.addUrl": {
+      "signatures": [
+        "(details: UrlDetails): Promise<void>"
+      ],
+      "parameters": {
+        "details": {
+          "url": "string"
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/history#method-addUrl"
+    },
+    "history.deleteRange": {
+      "signatures": [
+        "(range: Range): Promise<void>"
+      ],
+      "parameters": {
+        "range": {
+          "endTime": "number",
+          "startTime": "number"
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/history#method-deleteRange"
+    },
+    "history.deleteAll": {
+      "signatures": [
+        "(): Promise<void>"
+      ],
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/history#method-deleteAll"
+    },
+    "history.getVisits": {
+      "signatures": [
+        "(details: UrlDetails): Promise<VisitItem[]>"
+      ],
+      "parameters": {
+        "details": {
+          "url": "string"
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/history#method-getVisits"
+    },
+    "history.deleteUrl": {
+      "signatures": [
+        "(details: UrlDetails): Promise<void>"
+      ],
+      "parameters": {
+        "details": {
+          "url": "string"
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/history#method-deleteUrl"
+    },
+    "sessions.getRecentlyClosed": {
+      "signatures": [
+        "(filter?: Filter): Promise<Session[]>"
+      ],
+      "parameters": {
+        "filter": {
+          "maxResults?": "number"
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/sessions#method-getRecentlyClosed"
+    },
+    "sessions.getDevices": {
+      "signatures": [
+        "(filter?: Filter): Promise<Device[]>"
+      ],
+      "parameters": {
+        "filter": {
+          "maxResults?": "number"
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/sessions#method-getDevices"
+    },
+    "sessions.restore": {
+      "signatures": [
+        "(sessionId?: string): Promise<Session>"
+      ],
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/sessions#method-restore"
+    },
+    "runtime.connect": {
+      "signatures": [
+        "(connectInfo?: ConnectInfo): Port",
+        "(extensionId: string | undefined, connectInfo?: ConnectInfo): Port"
+      ],
+      "parameters": {
+        "connectInfo": {
+          "name?": "string",
+          "includeTlsChannelId?": "boolean"
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/runtime#method-connect"
+    },
+    "runtime.connectNative": {
+      "signatures": [
+        "(application: string): Port"
+      ],
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/runtime#method-connectNative"
+    },
+    "runtime.getBackgroundPage": {
+      "signatures": [
+        "(): Promise<Window | undefined>"
+      ],
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/runtime#method-getBackgroundPage"
+    },
+    "runtime.getContexts": {
+      "signatures": [
+        "(filter: ContextFilter): Promise<ExtensionContext[]>"
+      ],
+      "parameters": {
+        "filter": {
+          "contextIds?": "string[]",
+          "contextTypes?": "(\"TAB\" | \"POPUP\" | \"BACKGROUND\" | \"OFFSCREEN_DOCUMENT\" | \"SIDE_PANEL\" | \"DEVELOPER_TOOLS\")[]",
+          "documentIds?": "string[]",
+          "documentOrigins?": "string[]",
+          "documentUrls?": "string[]",
+          "frameIds?": "number[]",
+          "incognito?": "boolean",
+          "tabIds?": "number[]",
+          "windowIds?": "number[]"
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/runtime#method-getContexts"
+    },
+    "runtime.getManifest": {
+      "signatures": [
+        "(): Manifest"
+      ],
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/runtime#method-getManifest"
+    },
+    "runtime.getPackageDirectoryEntry": {
+      "signatures": [
+        "(): Promise<DirectoryEntry>"
+      ],
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/runtime#method-getPackageDirectoryEntry"
+    },
+    "runtime.getPlatformInfo": {
+      "signatures": [
+        "(): Promise<PlatformInfo>"
+      ],
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/runtime#method-getPlatformInfo"
+    },
+    "runtime.getURL": {
+      "signatures": [
+        "(path: string): string"
+      ],
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/runtime#method-getURL"
+    },
+    "runtime.getVersion": {
+      "signatures": [
+        "(): string"
+      ],
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/runtime#method-getVersion"
+    },
+    "runtime.reload": {
+      "signatures": [
+        "(): void"
+      ],
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/runtime#method-reload"
+    },
+    "runtime.requestUpdateCheck": {
+      "signatures": [
+        "(): Promise<RequestUpdateCheckResult>"
+      ],
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/runtime#method-requestUpdateCheck"
+    },
+    "runtime.restart": {
+      "signatures": [
+        "(): void"
+      ],
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/runtime#method-restart"
+    },
+    "runtime.restartAfterDelay": {
+      "signatures": [
+        "(seconds: number): Promise<void>"
+      ],
+      "parameters": {
+        "seconds": {
+          "toString": "(radix?: number) => string",
+          "toFixed": "(fractionDigits?: number) => string",
+          "toExponential": "(fractionDigits?: number) => string",
+          "toPrecision": "(precision?: number) => string",
+          "valueOf": "() => number",
+          "toLocaleString": "{ (locales?: string | string[], options?: Intl.NumberFormatOptions): string; (locales?: Intl.LocalesArgument, options?: Intl.NumberFormatOptions): string; }"
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/runtime#method-restartAfterDelay"
+    },
+    "runtime.sendMessage": {
+      "signatures": [
+        "<M = any, R = any>(message: M, options?: MessageOptions): Promise<R>",
+        "<M = any, R = any>(extensionId: string | undefined | null, message: M, options?: MessageOptions): Promise<R>"
+      ],
+      "parameters": {
+        "options": {
+          "includeTlsChannelId?": "boolean"
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/runtime#method-sendMessage"
+    },
+    "runtime.sendNativeMessage": {
+      "signatures": [
+        "(application: string, message: object): Promise<any>"
+      ],
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/runtime#method-sendNativeMessage"
+    },
+    "runtime.setUninstallURL": {
+      "signatures": [
+        "(url: string): Promise<void>"
+      ],
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/runtime#method-setUninstallURL"
+    },
+    "runtime.openOptionsPage": {
+      "signatures": [
+        "(): Promise<void>"
+      ],
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/runtime#method-openOptionsPage"
+    },
+    "permissions.addHostAccessRequest": {
+      "signatures": [
+        "(request: AddHostAccessRequest): Promise<void>"
+      ],
+      "parameters": {
+        "request": {
+          "documentId?": "string",
+          "pattern?": "string",
+          "tabId?": "number"
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/permissions#method-addHostAccessRequest"
+    },
+    "permissions.contains": {
+      "signatures": [
+        "(permissions: Permissions): Promise<boolean>"
+      ],
+      "parameters": {
+        "permissions": {
+          "origins?": "string[]",
+          "permissions?": "runtime.ManifestPermission[]"
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/permissions#method-contains"
+    },
+    "permissions.getAll": {
+      "signatures": [
+        "(): Promise<Permissions>"
+      ],
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/permissions#method-getAll"
+    },
+    "permissions.request": {
+      "signatures": [
+        "(permissions: Permissions): Promise<boolean>"
+      ],
+      "parameters": {
+        "permissions": {
+          "origins?": "string[]",
+          "permissions?": "runtime.ManifestPermission[]"
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/permissions#method-request"
+    },
+    "permissions.remove": {
+      "signatures": [
+        "(permissions: Permissions): Promise<boolean>"
+      ],
+      "parameters": {
+        "permissions": {
+          "origins?": "string[]",
+          "permissions?": "runtime.ManifestPermission[]"
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/permissions#method-remove"
+    },
+    "permissions.removeHostAccessRequest": {
+      "signatures": [
+        "(request: RemoveHostAccessRequest): Promise<void>"
+      ],
+      "parameters": {
+        "request": {
+          "documentId?": "string",
+          "pattern?": "string",
+          "tabId?": "number"
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/permissions#method-removeHostAccessRequest"
+    },
+    "webNavigation.getFrame": {
+      "signatures": [
+        "(details: GetFrameDetails): Promise<GetFrameResultDetails | null>"
+      ],
+      "parameters": {
+        "details": {
+          "processId?": "number",
+          "tabId?": "number",
+          "frameId?": "number",
+          "documentId?": "string"
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/webNavigation#method-getFrame"
+    },
+    "webNavigation.getAllFrames": {
+      "signatures": [
+        "(details: GetAllFrameDetails): Promise<GetAllFrameResultDetails[] | null>"
+      ],
+      "parameters": {
+        "details": {
+          "tabId": "number"
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/webNavigation#method-getAllFrames"
+    },
+    "scripting.executeScript": {
+      "signatures": [
+        "<Args extends any[], Result>(injection: ScriptInjection<Args, Result>): Promise<Array<InjectionResult<Awaited<Result>>>>"
+      ],
+      "parameters": {
+        "injection": {
+          "target": "InjectionTarget",
+          "world?": "\"ISOLATED\" | \"MAIN\"",
+          "injectImmediately?": "boolean",
+          "func?": "(() => Result) | ((...args: Args) => Result)",
+          "files?": "string[]"
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/scripting#method-executeScript"
+    },
+    "scripting.insertCSS": {
+      "signatures": [
+        "(injection: CSSInjection): Promise<void>"
+      ],
+      "parameters": {
+        "injection": {
+          "origin?": "\"AUTHOR\" | \"USER\"",
+          "target": "InjectionTarget",
+          "css?": "string",
+          "files?": "string[]"
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/scripting#method-insertCSS"
+    },
+    "scripting.removeCSS": {
+      "signatures": [
+        "(injection: CSSInjection): Promise<void>"
+      ],
+      "parameters": {
+        "injection": {
+          "origin?": "\"AUTHOR\" | \"USER\"",
+          "target": "InjectionTarget",
+          "css?": "string",
+          "files?": "string[]"
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/scripting#method-removeCSS"
+    },
+    "scripting.registerContentScripts": {
+      "signatures": [
+        "(scripts: RegisteredContentScript[]): Promise<void>"
+      ],
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/scripting#method-registerContentScripts"
+    },
+    "scripting.unregisterContentScripts": {
+      "signatures": [
+        "(filter?: ContentScriptFilter): Promise<void>"
+      ],
+      "parameters": {
+        "filter": {
+          "ids?": "string[]"
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/scripting#method-unregisterContentScripts"
+    },
+    "scripting.getRegisteredContentScripts": {
+      "signatures": [
+        "(filter?: ContentScriptFilter): Promise<RegisteredContentScript[]>"
+      ],
+      "parameters": {
+        "filter": {
+          "ids?": "string[]"
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/scripting#method-getRegisteredContentScripts"
+    },
+    "scripting.updateContentScripts": {
+      "signatures": [
+        "(scripts: RegisteredContentScript[]): Promise<void>"
+      ],
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/scripting#method-updateContentScripts"
+    },
+    "storage.local.getBytesInUse": {
+      "signatures": [
+        "<T = { [key: string]: any; }>(keys?: keyof T | Array<keyof T> | null): Promise<number>"
+      ],
+      "parameters": {
+        "keys": {
+          "toString": "((radix?: number) => string) | (() => string) | (() => string) | (() => string)",
+          "valueOf": "(() => number) | (() => Object) | (() => string) | (() => symbol)",
+          "toLocaleString": "{ (locales?: string | string[], options?: Intl.NumberFormatOptions): string; (locales?: Intl.LocalesArgument, options?: Intl.NumberFormatOptions): string; } | (() => string) | { (): string; (locales: string | string[], options?: Intl.NumberFormatOptions & Intl.DateTimeFormatOptions): string; }"
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/storage#method-getBytesInUse"
+    },
+    "storage.local.clear": {
+      "signatures": [
+        "(): Promise<void>"
+      ],
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/storage#method-clear"
+    },
+    "storage.local.set": {
+      "signatures": [
+        "<T = { [key: string]: any; }>(items: Partial<T>): Promise<void>"
+      ],
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/storage#method-set"
+    },
+    "storage.local.remove": {
+      "signatures": [
+        "<T = { [key: string]: any; }>(keys: keyof T | Array<keyof T>): Promise<void>"
+      ],
+      "parameters": {
+        "keys": {
+          "toString": "((radix?: number) => string) | (() => string) | (() => string) | (() => string)",
+          "valueOf": "(() => number) | (() => Object) | (() => string) | (() => symbol)",
+          "toLocaleString": "{ (locales?: string | string[], options?: Intl.NumberFormatOptions): string; (locales?: Intl.LocalesArgument, options?: Intl.NumberFormatOptions): string; } | (() => string) | { (): string; (locales: string | string[], options?: Intl.NumberFormatOptions & Intl.DateTimeFormatOptions): string; }"
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/storage#method-remove"
+    },
+    "storage.local.get": {
+      "signatures": [
+        "<T = { [key: string]: unknown; }>(keys?: NoInfer<keyof T> | Array<NoInfer<keyof T>> | Partial<NoInfer<T>> | null | undefined): Promise<T>"
+      ],
+      "parameters": {
+        "keys": {
+          "toString": "((radix?: number) => string) | (() => string) | (() => string) | (() => string) | (() => string)",
+          "valueOf": "(() => number) | (() => Object) | (() => string) | (() => symbol)",
+          "toLocaleString": "{ (locales?: string | string[], options?: Intl.NumberFormatOptions): string; (locales?: Intl.LocalesArgument, options?: Intl.NumberFormatOptions): string; } | (() => string) | { (): string; (locales: string | string[], options?: Intl.NumberFormatOptions & Intl.DateTimeFormatOptions): string; }"
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/storage#method-get"
+    },
+    "storage.local.setAccessLevel": {
+      "signatures": [
+        "(accessOptions: { accessLevel: `${AccessLevel}`; }): Promise<void>"
+      ],
+      "parameters": {
+        "accessOptions": {
+          "accessLevel": "\"TRUSTED_CONTEXTS\" | \"TRUSTED_AND_UNTRUSTED_CONTEXTS\""
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/storage#method-setAccessLevel"
+    },
+    "storage.local.getKeys": {
+      "signatures": [
+        "(): Promise<string[]>"
+      ],
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/storage#method-getKeys"
+    },
+    "storage.session.getBytesInUse": {
+      "signatures": [
+        "<T = { [key: string]: any; }>(keys?: keyof T | Array<keyof T> | null): Promise<number>"
+      ],
+      "parameters": {
+        "keys": {
+          "toString": "((radix?: number) => string) | (() => string) | (() => string) | (() => string)",
+          "valueOf": "(() => number) | (() => Object) | (() => string) | (() => symbol)",
+          "toLocaleString": "{ (locales?: string | string[], options?: Intl.NumberFormatOptions): string; (locales?: Intl.LocalesArgument, options?: Intl.NumberFormatOptions): string; } | (() => string) | { (): string; (locales: string | string[], options?: Intl.NumberFormatOptions & Intl.DateTimeFormatOptions): string; }"
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/storage#method-getBytesInUse"
+    },
+    "storage.session.clear": {
+      "signatures": [
+        "(): Promise<void>"
+      ],
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/storage#method-clear"
+    },
+    "storage.session.set": {
+      "signatures": [
+        "<T = { [key: string]: any; }>(items: Partial<T>): Promise<void>"
+      ],
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/storage#method-set"
+    },
+    "storage.session.remove": {
+      "signatures": [
+        "<T = { [key: string]: any; }>(keys: keyof T | Array<keyof T>): Promise<void>"
+      ],
+      "parameters": {
+        "keys": {
+          "toString": "((radix?: number) => string) | (() => string) | (() => string) | (() => string)",
+          "valueOf": "(() => number) | (() => Object) | (() => string) | (() => symbol)",
+          "toLocaleString": "{ (locales?: string | string[], options?: Intl.NumberFormatOptions): string; (locales?: Intl.LocalesArgument, options?: Intl.NumberFormatOptions): string; } | (() => string) | { (): string; (locales: string | string[], options?: Intl.NumberFormatOptions & Intl.DateTimeFormatOptions): string; }"
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/storage#method-remove"
+    },
+    "storage.session.get": {
+      "signatures": [
+        "<T = { [key: string]: unknown; }>(keys?: NoInfer<keyof T> | Array<NoInfer<keyof T>> | Partial<NoInfer<T>> | null | undefined): Promise<T>"
+      ],
+      "parameters": {
+        "keys": {
+          "toString": "((radix?: number) => string) | (() => string) | (() => string) | (() => string) | (() => string)",
+          "valueOf": "(() => number) | (() => Object) | (() => string) | (() => symbol)",
+          "toLocaleString": "{ (locales?: string | string[], options?: Intl.NumberFormatOptions): string; (locales?: Intl.LocalesArgument, options?: Intl.NumberFormatOptions): string; } | (() => string) | { (): string; (locales: string | string[], options?: Intl.NumberFormatOptions & Intl.DateTimeFormatOptions): string; }"
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/storage#method-get"
+    },
+    "storage.session.setAccessLevel": {
+      "signatures": [
+        "(accessOptions: { accessLevel: `${AccessLevel}`; }): Promise<void>"
+      ],
+      "parameters": {
+        "accessOptions": {
+          "accessLevel": "\"TRUSTED_CONTEXTS\" | \"TRUSTED_AND_UNTRUSTED_CONTEXTS\""
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/storage#method-setAccessLevel"
+    },
+    "storage.session.getKeys": {
+      "signatures": [
+        "(): Promise<string[]>"
+      ],
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/storage#method-getKeys"
+    },
+    "storage.sync.getBytesInUse": {
+      "signatures": [
+        "<T = { [key: string]: any; }>(keys?: keyof T | Array<keyof T> | null): Promise<number>"
+      ],
+      "parameters": {
+        "keys": {
+          "toString": "((radix?: number) => string) | (() => string) | (() => string) | (() => string)",
+          "valueOf": "(() => number) | (() => Object) | (() => string) | (() => symbol)",
+          "toLocaleString": "{ (locales?: string | string[], options?: Intl.NumberFormatOptions): string; (locales?: Intl.LocalesArgument, options?: Intl.NumberFormatOptions): string; } | (() => string) | { (): string; (locales: string | string[], options?: Intl.NumberFormatOptions & Intl.DateTimeFormatOptions): string; }"
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/storage#method-getBytesInUse"
+    },
+    "storage.sync.clear": {
+      "signatures": [
+        "(): Promise<void>"
+      ],
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/storage#method-clear"
+    },
+    "storage.sync.set": {
+      "signatures": [
+        "<T = { [key: string]: any; }>(items: Partial<T>): Promise<void>"
+      ],
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/storage#method-set"
+    },
+    "storage.sync.remove": {
+      "signatures": [
+        "<T = { [key: string]: any; }>(keys: keyof T | Array<keyof T>): Promise<void>"
+      ],
+      "parameters": {
+        "keys": {
+          "toString": "((radix?: number) => string) | (() => string) | (() => string) | (() => string)",
+          "valueOf": "(() => number) | (() => Object) | (() => string) | (() => symbol)",
+          "toLocaleString": "{ (locales?: string | string[], options?: Intl.NumberFormatOptions): string; (locales?: Intl.LocalesArgument, options?: Intl.NumberFormatOptions): string; } | (() => string) | { (): string; (locales: string | string[], options?: Intl.NumberFormatOptions & Intl.DateTimeFormatOptions): string; }"
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/storage#method-remove"
+    },
+    "storage.sync.get": {
+      "signatures": [
+        "<T = { [key: string]: unknown; }>(keys?: NoInfer<keyof T> | Array<NoInfer<keyof T>> | Partial<NoInfer<T>> | null | undefined): Promise<T>"
+      ],
+      "parameters": {
+        "keys": {
+          "toString": "((radix?: number) => string) | (() => string) | (() => string) | (() => string) | (() => string)",
+          "valueOf": "(() => number) | (() => Object) | (() => string) | (() => symbol)",
+          "toLocaleString": "{ (locales?: string | string[], options?: Intl.NumberFormatOptions): string; (locales?: Intl.LocalesArgument, options?: Intl.NumberFormatOptions): string; } | (() => string) | { (): string; (locales: string | string[], options?: Intl.NumberFormatOptions & Intl.DateTimeFormatOptions): string; }"
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/storage#method-get"
+    },
+    "storage.sync.setAccessLevel": {
+      "signatures": [
+        "(accessOptions: { accessLevel: `${AccessLevel}`; }): Promise<void>"
+      ],
+      "parameters": {
+        "accessOptions": {
+          "accessLevel": "\"TRUSTED_CONTEXTS\" | \"TRUSTED_AND_UNTRUSTED_CONTEXTS\""
+        }
+      },
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/storage#method-setAccessLevel"
+    },
+    "storage.sync.getKeys": {
+      "signatures": [
+        "(): Promise<string[]>"
+      ],
+      "callback": false,
+      "documentation": "https://developer.chrome.com/docs/extensions/reference/api/storage#method-getKeys"
+    }
+  }
+}

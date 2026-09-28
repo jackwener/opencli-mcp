@@ -23,6 +23,15 @@ interface AgentApi {
 class Browser {
   id: "chrome";
   type: "extension";
+  chrome: { // Native Chrome APIs in the extension service worker. Positional JSON arguments, native return values.
+    call(method: string, args?: Array<unknown>): Promise<unknown>;
+    describe(member: string): Promise<unknown>;
+    watch(event: string, options?: StreamOptions): Promise<EventStream>;
+  };
+  logs: { // This extension's own service-worker logs; not logs of other installed extensions.
+    watch(options?: StreamOptions): Promise<EventStream>;
+    read(options?: StreamReadOptions): Promise<StreamBatch>;
+  };
   tabs: {
     new(url?: string): Promise<Tab>;
     list(): Promise<Array<{ id?: string; tabId: number; pending?: true; url?: string; title?: string; active: boolean; selected: boolean; origin: "agent" | "user"; state: "active" | "handoff"; }>>;
@@ -64,14 +73,19 @@ class Tab {
     call(name: string, input?: Record<string, unknown>): Promise<unknown>;
   };
   expect(what: Expectation, opts?: { timeoutMs?: number; }): Promise<CheckResult>; // Assert what the page must show now (polled up to timeoutMs).
-  evaluate(js: string, opts?: { allowWrite?: boolean; frame?: number; }): Promise<unknown>; // Read-only page evaluation.
+  evaluate(script: string | ((arg: any) => any), opts?: { arg?: unknown; frame?: number; timeoutMs?: number; }): Promise<unknown>; // Main World page code; functions receive only opts.arg, never host closures. Dispatched scripts are never replayed.
+  cdp: { // Native CDP on this Tab's shared debugger attachment. Parameters are not rewritten.
+    send(method: string, params?: Record<string, unknown>, target?: { frameId: string; }): Promise<unknown>;
+    watch(event: string, options?: StreamOptions): Promise<EventStream>;
+  };
   dialog: { // Native alert/confirm/prompt dialogs block the page; commands fail with `dialog_open` until answered.
     get(): Promise<DialogInfo | null>;
     accept(text?: string): Promise<DialogInfo | null>;
     dismiss(): Promise<DialogInfo | null>;
   };
   console: { // Console messages and uncaught exceptions since the tab was attached (the plugin's tab.dev.logs); cursor-paged like network.read.
-    read(opts?: { afterSequence?: number; limit?: number; levels?: Array<"debug" | "info" | "log" | "warn" | "error">; filter?: string; }): Promise<{ cursor: number; entries: Array<ConsoleEntry>; hasMore: boolean; }>;
+    read(opts?: StreamReadOptions): Promise<StreamBatch>;
+    watch(options?: StreamOptions): Promise<EventStream>;
   };
   network: {
     start(pattern?: string): Promise<boolean>;
@@ -171,6 +185,17 @@ interface DownloadWaitResult {
   error?: string;
   elapsedMs: number;
 }
+
+interface EventStream { read(options?: StreamReadOptions): Promise<StreamBatch>; close(): Promise<void>;
+}
+
+interface StreamReadOptions { cursor?: string; limit?: number; levels?: string[]; filter?: string }
+
+interface StreamOptions { capacity?: number; args?: unknown[] }
+
+interface StreamEntry { seq: number; timestamp: string; event?: string; args?: unknown[]; params?: unknown; level?: string; message?: string; url?: string; line?: number; truncated?: boolean }
+
+interface StreamBatch { entries: StreamEntry[]; cursor: string; hasMore: boolean; dropped: number; reset: boolean; closed?: boolean; reason?: string }
 
 interface ToolDefinition {
   site: string;

@@ -13,21 +13,23 @@ export class JsSession {
   private tail: Promise<unknown> = Promise.resolve();
   private generation = 0;
   private disposed = false;
+  private cleanup?: Promise<void>;
+  private cleanupError?: string;
   private references = new Map<number, any>();
   private identities = new WeakMap<object, number>();
   private pendingCalls = 0;
   private drainWaiters = new Set<() => void>();
   runs = 0;
 
-  constructor(private readonly globals: Record<string, unknown>) {}
+  constructor(private readonly globals: Record<string, unknown>, private readonly onReset?: () => Promise<void>) {}
 
-  status(): { state: 'idle' | 'running' | 'draining'; generation: number; pendingCalls: number } {
-    return { state: this.active ? 'running' : this.pendingCalls ? 'draining' : 'idle', generation: this.generation, pendingCalls: this.pendingCalls };
+  status(): { state: 'idle' | 'running' | 'draining'; generation: number; pendingCalls: number; cleanupError?: string } {
+    return { state: this.active ? 'running' : (this.pendingCalls || this.cleanup) ? 'draining' : 'idle', generation: this.generation, pendingCalls: this.pendingCalls + (this.cleanup ? 1 : 0), ...(this.cleanupError && { cleanupError: this.cleanupError }) };
   }
 
   reset(): { reset: true; pendingCalls: number } {
     this.stop('js_reset', 'JavaScript execution was reset.');
-    return { reset: true, pendingCalls: this.pendingCalls };
+    return { reset: true, pendingCalls: this.pendingCalls + (this.cleanup ? 1 : 0) };
   }
 
   async dispose(): Promise<void> {
@@ -35,6 +37,7 @@ export class JsSession {
     this.stop('js_closed', 'JavaScript session was closed.');
     // A dispatched tab creation may finish after the worker exits. Drain it before browser cleanup.
     if (this.pendingCalls) await new Promise<void>(resolve => { this.drainWaiters.add(resolve); });
+    await this.cleanup;
   }
 
   run(code: string, opts: { timeoutMs?: number; signal?: AbortSignal } = {}): Promise<JsRunResult> {
@@ -42,7 +45,7 @@ export class JsSession {
     const next = this.tail.then(() => {
       if (opts.signal?.aborted) return this.failure('js_cancelled', 'This call was cancelled before execution.');
       if (this.disposed || generation !== this.generation) return this.failure('js_reset', 'The session changed before this queued call could start.', 'Inspect the session and resubmit only the code you still need.');
-      if (this.pendingCalls) return this.failure('js_busy', 'An earlier browser/API operation is still completing.', 'Call doctor to inspect javascript.pendingCalls before submitting more code.');
+      if (this.pendingCalls || this.cleanup) return this.failure('js_busy', 'An earlier browser/API operation is still completing.', 'Call doctor to inspect javascript.pendingCalls before submitting more code.');
       return this.execute(code, opts.timeoutMs ?? 300_000, opts.signal);
     });
     this.tail = next.catch(() => {});
@@ -64,6 +67,13 @@ export class JsSession {
       data: { bindingsCleared: true, pendingCalls: this.pendingCalls } } });
     this.references.clear();
     this.identities = new WeakMap();
+    if (this.onReset && !this.cleanup) {
+      this.cleanupError = undefined;
+      this.cleanup = (async () => {
+        if (this.pendingCalls) await new Promise<void>(resolve => this.drainWaiters.add(resolve));
+        await this.onReset!();
+      })().catch(error => { this.cleanupError = `Subscription cleanup failed: ${String(error)}. Retry js_reset.`; }).finally(() => { this.cleanup = undefined; });
+    }
   }
 
   private reference(value: object): unknown {
@@ -146,7 +156,10 @@ export class JsSession {
       let receiver: any;
       for (const key of message.path) { receiver = target; target = target?.[key]; }
       if (typeof target !== 'function') throw Object.assign(new Error(`Unknown API method ${message.path.join('.')}`), { code: 'unknown_method', hint: 'Read docs_get for the relevant API topic.' });
-      const value = await Reflect.apply(target, receiver, this.decode(message.args));
+      const args = this.decode(message.args);
+      // Page functions cross as source, never execute in the host or capture host closures.
+      if (message.path.at(-1) === 'evaluate' && message.args[0]?.$function) args[0] = message.args[0];
+      const value = await Reflect.apply(target, receiver, args);
       if (worker === this.worker) worker.postMessage({ kind: 'reply', id: message.id, value: this.encode(value) });
     } catch (error) {
       const e = error as Error & { code?: string; hint?: string; data?: unknown };

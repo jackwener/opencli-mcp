@@ -2,14 +2,16 @@
 import type { BrowserFeature } from '../protocol.js';
 
 export const BROWSER_CAPABILITIES: Array<{ id: BrowserFeature; description: string; doc?: string }> = [
-  { id: 'cdp', description: 'Allowlisted Chrome DevTools Protocol on the current tab.', doc: 'capabilities/cdp' },
+  { id: 'chrome-api', description: 'Native Chrome API calls and on-demand signatures.', doc: 'capabilities/chrome' },
+  { id: 'extension-logs', description: 'This extension service worker’s own logs.' },
+  { id: 'cdp', description: 'Native Chrome DevTools Protocol via tab.cdp on an explicit Tab.', doc: 'capabilities/cdp' },
   { id: 'viewport', description: 'Temporarily override and reset viewport dimensions.' },
   { id: 'visibility', description: 'Show or hide the session window.', doc: 'capabilities/visibility' },
   { id: 'webmcp', description: 'Tools registered by the current page.', doc: 'capabilities/webmcp' },
 ];
 
 export const TAB_FEATURES: Record<string, BrowserFeature> = {
-  webmcp: 'webmcp', dialog: 'dialogs', console: 'console', network: 'network', frames: 'frames', download: 'downloads',
+  evaluate: 'page-evaluate', cdp: 'cdp', webmcp: 'webmcp', dialog: 'dialogs', console: 'streams', network: 'network', frames: 'frames', download: 'downloads',
 };
 
 /** Keep generated source documentation complete on disk; project only available members for an MCP client. */
@@ -17,25 +19,29 @@ export function projectApiReference(source: string, features: readonly BrowserFe
   const available = new Set(features);
   const lines: string[] = [];
   let inTab = false;
+  let inBrowser = false;
   let skippingObject = false;
   for (const line of source.split('\n')) {
+    if (line === 'class Browser {') inBrowser = true;
+    if (inBrowser && line === '}') inBrowser = false;
     if (line === 'class Tab {') inTab = true;
     if (inTab && line === '}') inTab = false;
     if (skippingObject) {
       if (line === '  };') skippingObject = false;
       continue;
     }
-    if (inTab) {
+    if (inTab || inBrowser) {
       const member = /^  (\w+)(?:\(|:)/.exec(line)?.[1];
-      const feature = member && TAB_FEATURES[member];
+      const feature = member && (inTab ? TAB_FEATURES[member] : ({ chrome: 'chrome-api', logs: 'extension-logs' } as Record<string, BrowserFeature>)[member]);
       if (feature && !available.has(feature)) {
         if (line.includes(': {')) skippingObject = true;
         continue;
       }
     }
+    if ((inTab || inBrowser) && !available.has('streams') && /^    watch\(/.test(line)) continue;
     lines.push(line);
   }
-  const banner = `Available extension features now: ${features.length ? features.join(', ') : 'none (browser disconnected or not advertised)'}. Optional Tab members absent below are unavailable.`;
+  const banner = `Available extension features now: ${features.length ? features.join(', ') : 'none (browser disconnected or not advertised)'}. Optional members absent below are unavailable.`;
   return lines.join('\n').replace('```ts\n', `${banner}\n\n\`\`\`ts\n`);
 }
 
@@ -46,7 +52,8 @@ export function selectApiReference(source: string, member: string): string | nul
   const declarations = new Map<string, string>();
   const starts = [...code.matchAll(/^(?:class|interface|type) (\w+)\b/gm)];
   for (const [i, match] of starts.entries()) declarations.set(match[1], code.slice(match.index, starts[i + 1]?.index ?? code.length).trim());
-  const [name, method, ...rest] = member.split('.');
+  const [rawName, method, ...rest] = member.split('.');
+  const name = rawName === 'browser' ? 'Browser' : rawName === 'tab' ? 'Tab' : rawName;
   if (rest.length) return null;
   let selected = declarations.get(name);
   if (!selected) return null;

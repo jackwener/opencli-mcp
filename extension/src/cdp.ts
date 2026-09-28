@@ -1,3 +1,5 @@
+import { EventBuffer } from './event-buffer';
+import type { StreamEntry, StreamReadOptions, StreamBatch } from '../../src/protocol.js';
 // Derived from OpenCLI (https://github.com/jackwener/OpenCLI), Apache-2.0. Adapted for opencli-mcp.
 import type { DownloadWaitResult } from '../../src/protocol.js';
 /**
@@ -97,26 +99,33 @@ const dialogWaiters = new Map<number, Set<(d: PendingDialog) => void>>();
 
 /** Console messages + uncaught exceptions per tab (ring buffer), captured from Runtime events while attached. */
 interface ConsoleEntry { seq: number; level: 'debug' | 'info' | 'log' | 'warn' | 'error'; message: string; timestamp: string; url?: string; line?: number }
-const consoleLogs = new Map<number, { seq: number; entries: ConsoleEntry[] }>();
-const CONSOLE_CAP = 500;
+const consoleLogs = new Map<number, EventBuffer>();
+export function subscribeConsole(tabId: number, listener: (entry: StreamEntry) => void): () => void {
+  return consoleBuffer(tabId).subscribe(listener);
+}
+function consoleBuffer(tabId: number): EventBuffer {
+  let buffer = consoleLogs.get(tabId);
+  if (!buffer) { buffer = new EventBuffer(); consoleLogs.set(tabId, buffer); }
+  return buffer;
+}
 function noteConsole(tabId: number, level: ConsoleEntry['level'], message: string, url?: string, line?: number): void {
-  let log = consoleLogs.get(tabId);
-  if (!log) { log = { seq: 0, entries: [] }; consoleLogs.set(tabId, log); }
-  log.entries.push({ seq: ++log.seq, level, message: message.slice(0, 4000), timestamp: new Date().toISOString(), url, line });
-  if (log.entries.length > CONSOLE_CAP) log.entries.splice(0, log.entries.length - CONSOLE_CAP);
+  const entry = { level, message: message.slice(0, 4000), ...(message.length > 4000 && { truncated: true }), url, line };
+  consoleBuffer(tabId).push(entry);
 }
 function describeRemoteObject(o: { type?: string; value?: unknown; description?: string; unserializableValue?: string }): string {
   if (o.value !== undefined) return typeof o.value === 'string' ? o.value : JSON.stringify(o.value);
   return o.unserializableValue ?? o.description ?? String(o.type ?? '');
 }
-export function readConsole(tabId: number, opts: { afterSequence?: number; limit?: number; levels?: string[]; filter?: string } = {}): { cursor: number; entries: ConsoleEntry[]; hasMore: boolean } {
-  const log = consoleLogs.get(tabId);
-  const after = opts.afterSequence ?? 0;
-  const levels = opts.levels?.length ? new Set(opts.levels.map((l) => (l === 'warning' ? 'warn' : l))) : null;
-  const all = (log?.entries ?? []).filter((e) => e.seq > after && (!levels || levels.has(e.level)) && (!opts.filter || e.message.includes(opts.filter)));
-  const limit = Math.max(1, Math.min(opts.limit ?? 100, 500));
-  const page = all.slice(0, limit);
-  return { cursor: page.length ? page[page.length - 1].seq : after, entries: page, hasMore: all.length > limit };
+export function readConsole(tabId: number, opts: StreamReadOptions = {}): StreamBatch {
+  return consoleBuffer(tabId).read(opts);
+}
+
+/** Keep internal observers attached; other CDP commands use native parameters unchanged. */
+export function checkPublicCdp(method: string): void {
+  if (['Runtime.disable', 'Page.disable', 'Network.disable', 'Target.setAutoAttach', 'Target.detachFromTarget'].includes(method)) {
+    throw Object.assign(new Error(`${method} conflicts with runtime-owned debugger observers`), {
+      code: 'runtime_state_conflict', hint: 'Close your event subscription with close(); the shared runtime keeps its own observers enabled.' });
+  }
 }
 const dialogClosedWaiters = new Map<number, Set<() => void>>();
 export function getDialog(tabId: number): PendingDialog | null { return dialogs.get(tabId) ?? null; }
@@ -190,10 +199,10 @@ export async function sendDebuggerCommand<T = unknown>(
   params?: Record<string, unknown>,
   timeoutMs: number = CDP_COMMAND_TIMEOUT_MS,
 ): Promise<T> {
-  return sendDebuggerCommandOnce(target, method, params, timeoutMs, true);
+  return sendDebuggerCommandOnce(target, method, params, timeoutMs);
 }
 
-async function sendDebuggerCommandOnce<T>(target: chrome.debugger.Debuggee, method: string, params: Record<string, unknown> | undefined, timeoutMs: number, mayRetry: boolean): Promise<T> {
+async function sendDebuggerCommandOnce<T>(target: chrome.debugger.Debuggee, method: string, params: Record<string, unknown> | undefined, timeoutMs: number): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const tabId = target.tabId;
   const isDialogAnswer = method === 'Page.handleJavaScriptDialog';
@@ -216,19 +225,17 @@ async function sendDebuggerCommandOnce<T>(target: chrome.debugger.Debuggee, meth
       commandPromise,
       ...(dialogPromise ? [dialogPromise] : []),
       new Promise<never>((_, reject) => {
-        timer = setTimeout(() => reject(new Error(
+        timer = setTimeout(() => reject(Object.assign(new Error(
           `CDP command ${method} timed out after ${Math.round(timeoutMs / 1000)}s — the page may be blocked by a native dialog (alert/confirm/print)`,
-        )), timeoutMs);
+        ), { code: 'cdp_timeout' })), timeoutMs);
       }),
     ]);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    // the debugger went away under us (user clicked "cancel" on the debugging bar, another extension, a crash):
-    // forget the attachment and retry the command once on a fresh attach — the plugin's "Debugger unattached" path
-    if (mayRetry && tabId !== undefined && !(target as { sessionId?: string }).sessionId && attached.has(tabId) && /Debugger is not attached|Detached while|Target closed|not attached/i.test(msg)) {
+    // Invalidate the attachment for the next operation, never replay a dispatched command.
+    if (tabId !== undefined && /Debugger is not attached|Detached while|Target closed|not attached/i.test(msg)) {
       attached.delete(tabId);
-      await ensureAttached(tabId, false);
-      return sendDebuggerCommandOnce<T>(target, method, params, timeoutMs, false);
+      throw Object.assign(new Error(msg), { code: 'detached_mid_command' });
     }
     throw e;
   } finally {
@@ -372,6 +379,14 @@ async function attachNow(tabId: number, aggressiveRetry: boolean): Promise<void>
   }
 }
 
+export function evaluationValue(result?: { type?: string; value?: unknown; unserializableValue?: string }): unknown {
+  if (!result || result.type === 'undefined') return null;
+  if (result.unserializableValue !== undefined || !Object.prototype.hasOwnProperty.call(result, 'value')) {
+    throw Object.assign(new Error('Page result is not JSON-serializable; return plain data rather than a DOM node, function or BigInt.'), { code: 'result_not_serializable' });
+  }
+  return result.value;
+}
+
 export async function evaluate(
   tabId: number,
   expression: string,
@@ -399,7 +414,7 @@ export async function evaluate(
       throw new Error(errMsg);
     }
 
-    return result.result?.value;
+    return evaluationValue(result.result);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     if (msg.includes('Detached') || msg.includes('Debugger is not attached') || msg.includes('Target closed')) {
@@ -812,6 +827,7 @@ export function registerListeners(): void {
       return;
     }
     if (source.tabId) {
+      consoleLogs.delete(source.tabId);
       dialogs.delete(source.tabId);
       attached.delete(source.tabId);
       networkCaptures.delete(source.tabId);

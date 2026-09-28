@@ -18,7 +18,7 @@ The core loop and the discipline that makes it reliable. Use `js` and await ever
    are entered the same way.
 6. **Don't re-`goto` a URL the tab is already on** (it reloads and loses form state); use `await tab.act({action:"reload"})`
    when a reload is intended.
-7. **`tab.evaluate(js)` is read-only page scope.** Writes go through `tab.act()`.
+7. **`tab.evaluate(script, {arg, frame, timeoutMs})` runs in page Main World and can read or modify it.** Functions receive only `arg`, not host closures. Results must be serializable data. Prefer `tab.act()` for ordinary input and its verification. Dispatched scripts are never replayed; a timeout does not cancel page code.
 8. **Choose the data path for the task.** For a reusable adapter, start from the UI behavior and inspect the request that carried the data. Every session tab captures from attach: `tab.network.list()` returns compact request summaries; detail by `seq` returns headers and a bounded request or response body. Continue with `body.nextStart` when needed. In `js`, use `tab.network.list()` and `tab.network.detail({seq})`. `recon.discover(tab)` ranks captured requests, and `{includeStatic:true}` adds script analysis only when needed. Replay a candidate with `tab.fetchJson(url,{method,headers,body})` inside the logged-in page, then compare its result to the captured response. An adapter should handle changing tokens at run time. For a one-off UI task, complete it directly; there is no need to reverse-engineer every endpoint.
 9. **Dialogs:** a native `alert`/`confirm`/`prompt` freezes the page (`dialog_open`, details in `error.dialog`). Read
    with `tab.dialog.get()` and answer `tab.dialog.accept(text?)` / `tab.dialog.dismiss()` (in `js`), then retry — never

@@ -31,4 +31,5 @@ const manifest = JSON.parse(readFileSync(resolve(ext, 'manifest.json'), 'utf8'))
 writeFileSync(resolve(out, 'manifest.json'), JSON.stringify(manifest, null, 2));
 cpSync(resolve(ext, 'icons'), resolve(out, 'icons'), { recursive: true });
 cpSync(resolve(ext, 'cursor.svg'), resolve(out, 'cursor.svg'));
+cpSync(resolve(ext, 'chrome-reference.LICENSE.txt'), resolve(out, 'chrome-reference.LICENSE.txt'));
 console.log('extension built →', out);

@@ -6,7 +6,8 @@ Start with `docs_get {}` for a short quickstart and available topics. For exact 
 
 - If a ready-made adapter fits, use `sites_search` then `site_run`. Enabled adapters can also appear as typed site tools.
 - Otherwise open or claim a tab in `js`, then `tab.observe()` → `tab.act(...)` → `tab.expect(...)` or a relevant observation. `tab.read()` reads content; `tab.find()` locates a target in a large action map. Use a ref returned by the current observation.
+- Browser management uses `browser.chrome.call(method, argsArray)`; inspect signatures with `browser.chrome.describe(member)`. Page scripts use `tab.evaluate`, and Tab-level protocol calls use `tab.cdp.send`. Discover availability through `browser.capabilities.list()`.
 - Batch already determined steps and data processing. Return new evidence when the next step needs model judgment. Await every API operation before returning.
 - An action's input delivery or control verification does not prove the site's task is complete. Verify the cheapest authoritative result; inspect before retrying uncertain actions.
-- Finish with `session_finalize`, keeping only deliverable/handoff tabs. `js_reset` clears JavaScript bindings and stops its worker; it does not close browser tabs. `doctor` reports connection and JavaScript execution status.
+- Finish with `session_finalize`, keeping only deliverable/handoff tabs. `js_reset` clears JavaScript bindings, closes explicit subscriptions and stops its worker; it does not close browser tabs. `doctor` reports connection and JavaScript execution status.
 - To create an adapter, read `define-tools`, explore and verify its workflow, then use `tools.define`, `tools.try`, and `tools.activate` in `js`.

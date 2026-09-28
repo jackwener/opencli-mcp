@@ -83,7 +83,14 @@ export class Runtime extends EventEmitter<RuntimeEvents> implements PageProvider
     this.configSites = opts.sites ?? [];
     this.configSitesWrite = opts.sitesWrite ?? [];
     if (opts.log) this.on('log', opts.log);
-    this.bridge?.on('event', (e) => this.emit('browser-event', e));
+    this.bridge?.on('event', (e) => {
+      if ('page' in e && e.page && 'session' in e) {
+        const id = e.session.replace(/^mcp:/, ''); const state = this.sessions.get(id);
+        if (e.kind === 'tab_closed' || e.kind === 'tab_released') this.forgetPage(id, e.page);
+        if (e.kind === 'tab_navigated' && state) for (const key of state.lastObserve.keys()) if (key.startsWith(`${e.page}:`)) state.lastObserve.delete(key);
+      }
+      this.emit('browser-event', e);
+    });
     this.bridge?.on('hello', () => this.emit('features-changed', this.features()));
     this.bridge?.on('close', () => { for (const s of this.sessions.values()) { s.browserPage = undefined; s.pages.clear(); } this.emit('features-changed', []); });
   }

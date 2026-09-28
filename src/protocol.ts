@@ -13,6 +13,7 @@
 
 export type Action =
   // page control
+  | 'chrome-call' | 'chrome-describe' | 'stream-watch' | 'stream-read' | 'stream-close' | 'streams-reset' | 'extension-logs'
   | 'exec' | 'navigate' | 'tabs' | 'cookies' | 'screenshot'
   | 'network-capture-start' | 'network-capture-read'
   | 'wait-download' | 'cdp' | 'frames'
@@ -39,6 +40,14 @@ export interface Command {
   /** Stable Chrome tab id, encoded as a string; the extension checks session ownership. */
   page?: string;
   code?: string;
+  chromeMethod?: string;
+  chromeArgs?: unknown[];
+  streamSource?: 'chrome' | 'cdp' | 'console' | 'extension';
+  eventName?: string;
+  streamId?: string;
+  streamOptions?: StreamOptions;
+  streamRead?: StreamReadOptions;
+  cdpTarget?: { frameId: string };
   /** exec: evaluate in the page's main world (default) or in the engine's isolated world */
   world?: 'main' | 'engine';
   url?: string;
@@ -182,7 +191,7 @@ export interface Result {
 }
 
 export type BrowserEvent =
-  | { kind: 'tab_created' | 'tab_acquired' | 'tab_closed' | 'tab_released'; session: string; page?: string; tabId: number; url?: string; title?: string; origin?: 'agent' | 'user' }
+  | { kind: 'tab_created' | 'tab_acquired' | 'tab_closed' | 'tab_released' | 'tab_navigated'; session: string; page?: string; tabId: number; url?: string; title?: string; origin?: 'agent' | 'user' }
   | { kind: 'download'; state: string; filename?: string; url?: string }
   | { kind: 'dialog'; page?: string; dialogType: string; message?: string }
   | { kind: 'webmcp_changed'; page?: string }
@@ -191,7 +200,7 @@ export type BrowserEvent =
 export type HostToExt = { type: 'command'; command: Command } | { type: 'ready'; version: string; port: number };
 /** Advisory contract revision; individual capabilities and command results decide what works. */
 export const PROTOCOL_REVISION = 2;
-export type BrowserFeature = 'cdp' | 'network' | 'frames' | 'dialogs' | 'console' | 'downloads' | 'viewport' | 'visibility' | 'webmcp';
+export type BrowserFeature = 'chrome-api' | 'streams' | 'extension-logs' | 'page-evaluate' | 'cdp' | 'network' | 'frames' | 'dialogs' | 'console' | 'downloads' | 'viewport' | 'visibility' | 'webmcp';
 export type ExtToHost =
   | { type: 'hello'; extensionVersion: string; protocolRevision?: number; features?: BrowserFeature[] }
   | { type: 'result'; result: Result }
@@ -200,3 +209,9 @@ export type ExtToHost =
 export const NATIVE_HOST_NAME = 'com.opencli.mcp';
 /** Chrome caps host → extension frames at 1 MiB. */
 export const MAX_FRAME_BYTES = 1024 * 1024;
+
+/** Opaque cursors identify both a buffer generation and a sequence. */
+export interface StreamReadOptions { cursor?: string; limit?: number; levels?: string[]; filter?: string }
+export interface StreamOptions { capacity?: number; /** Chrome addListener filter arguments, after the listener. */ args?: unknown[] }
+export interface StreamEntry { seq: number; timestamp: string; event?: string; args?: unknown[]; params?: unknown; level?: string; message?: string; url?: string; line?: number; truncated?: boolean }
+export interface StreamBatch { entries: StreamEntry[]; cursor: string; hasMore: boolean; dropped: number; reset: boolean; closed?: boolean; reason?: string }

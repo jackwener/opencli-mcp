@@ -29,7 +29,9 @@
     "prepare": "npm run build",
     "check": "npm run typecheck && npm run build && npm test",
     "pack:store": "npm run build && node scripts/pack-store-extension.mjs",
-    "pack:manual": "npm run build && node scripts/pack-manual-extension.mjs"
+    "pack:manual": "npm run build && node scripts/pack-manual-extension.mjs",
+    "smoke:native": "node scripts/smoke-native-capabilities.mjs",
+    "generate:chrome": "node scripts/gen-chrome-reference.mjs"
   },
   "files": [
     "dist/",

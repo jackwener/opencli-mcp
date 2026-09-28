@@ -2,7 +2,7 @@
  * Frame worlds — the one place that knows how to run code in a frame. Two worlds per frame:
  *  - the engine world: an isolated world where Playwright's injected script and our page module live, so page
  *    scripts cannot see or tamper with them (the ChatGPT plugin's arrangement);
- *  - the main world: the frame's own default context, for read-only page evaluation.
+ *  - the main world: the frame's own default context, for page JavaScript evaluation.
  * Both are keyed by tab+frame, routed to the frame's own session when it is out-of-process, and rebuilt when
  * Chrome reports a context gone.
  */
@@ -151,7 +151,7 @@ export async function evaluateMain(tabId: number, frameId: string | null, expres
     if (/Cannot find context|context with specified id|Execution context was destroyed/i.test(msg)) { mainContexts.delete(k); throw Object.assign(new Error(msg), { code: 'frame_unreachable', hint: 'The frame navigated; retry.' }); }
     throw new Error(msg);
   }
-  return r.result?.value;
+  return executor.evaluationValue(r.result);
 }
 
 /** Call one page-module function (extension/src/page) in the main frame's world or a child frame's world. */

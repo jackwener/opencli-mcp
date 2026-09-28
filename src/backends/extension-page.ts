@@ -3,7 +3,7 @@ import type { ExtensionBridge } from '../host/bridge.js';
 import { BrowserCommandError } from '../host/bridge.js';
 import { wrapForEval, waitForDomStableJs, networkRequestsJs } from './browser-helpers.js';
 import type { RuntimePage } from './page-types.js';
-import type { Command, ActSpec, ActResult, DialogInfo, ConsoleEntry, CloseUserTabsResult, DownloadWaitResult } from '../protocol.js';
+import type { Command, ActSpec, ActResult, DialogInfo, StreamReadOptions, StreamBatch, CloseUserTabsResult, DownloadWaitResult } from '../protocol.js';
 import { pageCallJs, ActError } from '../shared/engine.js';
 import type { Expectation, CheckResult } from '../shared/page-contract.js';
 
@@ -37,7 +37,7 @@ function isNavigationError(err: unknown): boolean {
   if (code === 'target_navigated') return true;
   if (code && ['attach_failed', 'tab_gone', 'detached_mid_command', 'cdp_timeout'].includes(code)) return false;
   const message = err instanceof Error ? err.message : String(err);
-  return message.includes('Inspected target navigated or closed') || (message.includes('-32000') && /target|context/i.test(message));
+  return /Inspected target navigated|Execution context was destroyed|Cannot find context|context with specified id/i.test(message) || (message.includes('-32000') && /target|context/i.test(message));
 }
 
 class ExtensionPage implements ExtensionRuntimePage {
@@ -95,12 +95,18 @@ class ExtensionPage implements ExtensionRuntimePage {
   }
   getActivePage(): string | undefined { return this._page; }
 
-  async evaluate<T = unknown>(input: string): Promise<T> {
+  async evaluate<T = unknown>(input: string, opts: { timeoutMs?: number } = {}): Promise<T> {
+    return this.evaluateCommand(input, opts) as Promise<T>;
+  }
+  private async evaluateCommand(input: string, opts: { timeoutMs?: number; frameIndex?: number }): Promise<unknown> {
     const code = wrapForEval(input);
-    try { return (await this.send('exec', { code })).data as T; } catch (err) {
-      if (!isNavigationError(err)) throw err;
-      await new Promise((r) => setTimeout(r, 200));
-      return (await this.send('exec', { code })).data as T;
+    try { return (await this.send('exec', { code, timeoutMs: opts.timeoutMs, frameIndex: opts.frameIndex })).data; }
+    catch (error) {
+      const e = error as { code?: string; message?: string };
+      if (isNavigationError(error) || ['timeout', 'cdp_timeout', 'extension_disconnected', 'detached_mid_command', 'frame_unreachable'].includes(e.code ?? '')) {
+        throw new BrowserCommandError(e.message ?? String(error), 'command_outcome_unknown', 'Page code may have executed. Inspect the page before retrying; timeout does not cancel page JavaScript.', { dispatched: true });
+      }
+      throw error;
     }
   }
   /** Evaluate `js` with named args injected as `const` declarations. */
@@ -177,8 +183,8 @@ class ExtensionPage implements ExtensionRuntimePage {
   async networkRequests(includeStatic = false): Promise<unknown[]> { const r = await this.evaluate(networkRequestsJs(includeStatic)); return Array.isArray(r) ? r : []; }
   async waitForDownload(afterSequence: number, timeoutMs = 30_000): Promise<DownloadWaitResult> { return (await this.send('wait-download', { afterSequence, timeoutMs })).data as DownloadWaitResult; }
   async frames(): Promise<Array<{ index: number; frameId: string; url: string; name: string }>> { const r = await this.send('frames'); return Array.isArray(r.data) ? r.data as Array<{ index: number; frameId: string; url: string; name: string }> : []; }
-  async evaluateInFrame(js: string, frameIndex: number): Promise<unknown> { return (await this.send('exec', { code: wrapForEval(js), frameIndex })).data; }
-  async cdp(method: string, params?: Record<string, unknown>): Promise<unknown> { return (await this.send('cdp', { cdpMethod: method, cdpParams: params })).data; }
+  async evaluateInFrame(js: string, frameIndex: number, timeoutMs?: number): Promise<unknown> { return this.evaluateCommand(js, { frameIndex, timeoutMs }); }
+  async cdp(method: string, params?: Record<string, unknown>, target?: { frameId: string }): Promise<unknown> { return (await this.send('cdp', { cdpMethod: method, cdpParams: params, cdpTarget: target })).data; }
 
   // ── opencli-mcp extras ──
   async nameSession(name: string): Promise<void> { await this.bridge.send('session-name', { ...this.sessionOpts(), name }); }
@@ -218,7 +224,7 @@ class ExtensionPage implements ExtensionRuntimePage {
     catch (err) { if (!isNavigationError(err)) throw err; }
     return this._lastUrl ?? null;
   }
-  async consoleLogs(opts: { afterSequence?: number; limit?: number; levels?: string[]; filter?: string } = {}): Promise<{ cursor: number; entries: ConsoleEntry[]; hasMore: boolean }> { return (await this.send('console', { afterSequence: opts.afterSequence, limit: opts.limit, levels: opts.levels, filter: opts.filter })).data as { cursor: number; entries: ConsoleEntry[]; hasMore: boolean }; }
+  async consoleLogs(opts: StreamReadOptions = {}): Promise<StreamBatch> { return (await this.send('console', { streamRead: opts })).data as StreamBatch; }
   async history(op: 'reload' | 'back' | 'forward'): Promise<{ url?: string; title?: string; timedOut?: boolean }> { const r = (await this.send('history', { historyOp: op, timeoutMs: 20_000 })).data as { url?: string; title?: string; timedOut?: boolean }; this._lastUrl = r.url ?? null; return r; }
   async dialog(op: 'get' | 'accept' | 'dismiss', text?: string): Promise<{ dialog: DialogInfo | null; handled?: string }> { return (await this.send('dialog', { dialogOp: op, ...(text !== undefined && { text }), timeoutMs: 10_000 })).data as { dialog: DialogInfo | null; handled?: string }; }
   async act(spec: ActSpec): Promise<ActResult> {

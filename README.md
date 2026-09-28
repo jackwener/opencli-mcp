@@ -162,3 +162,9 @@ Found a bug or have a feature request? [Open an issue](https://github.com/jackwe
 ## License and credits
 
 [Apache-2.0](LICENSE). Some browser helpers and adapters were adapted from [OpenCLI](https://github.com/jackwener/OpenCLI); no OpenCLI dependency or compatibility layer is required. Uses [Playwright](https://github.com/microsoft/playwright)'s injected locator engine. Endpoint analysis is inspired by [jsluice](https://github.com/BishopFox/jsluice).
+
+### Native browser APIs
+
+The REPL also exposes `browser.chrome.call(method, argsArray)` for native Chrome APIs, `tab.cdp.send(method, params)` for an explicit Tab, and writable Main World `tab.evaluate(script, {arg, timeoutMs})`. Use `browser.chrome.describe("tabs.query")` for on-demand signatures and runtime availability. Chrome/CDP events and page/extension logs support bounded subscriptions with explicit loss/reset information. Read `docs_get {name:"capabilities/chrome"}` inside MCP for examples and lifecycle rules, or [the native capabilities guide](docs/capabilities/chrome.md).
+
+For development, `npm run smoke:native` runs the new flows in a disposable Chromium profile after a build. Set `OPENCLI_SMOKE_CHROME` to a Chromium executable when it is not available in the local Playwright cache. It does not modify the everyday browser profile or native-host registration.

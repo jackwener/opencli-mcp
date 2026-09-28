@@ -13,20 +13,16 @@ import { SessionManager, SessionError, type Session } from './sessions';
 import { performAct, ActError } from './act';
 import { evaluateInEngine, evaluateMain, registerFrameTracking, forgetTab as forgetEngineTab } from './world';
 
-const CDP_ALLOWLIST = new Set([
-  'Accessibility.enable', 'Accessibility.getFullAXTree', 'Accessibility.getPartialAXTree',
-  'DOM.enable', 'DOM.getDocument', 'DOM.getBoxModel', 'DOM.getContentQuads', 'DOM.focus', 'DOM.querySelector', 'DOM.querySelectorAll', 'DOM.scrollIntoViewIfNeeded', 'DOM.describeNode', 'DOM.getNodeForLocation',
-  'DOMSnapshot.captureSnapshot',
-  'Input.dispatchMouseEvent', 'Input.dispatchKeyEvent', 'Input.insertText', 'Input.dispatchTouchEvent',
-  'Page.getLayoutMetrics', 'Page.captureScreenshot', 'Page.getFrameTree', 'Page.handleJavaScriptDialog', 'Page.getNavigationHistory',
-  'Runtime.enable', 'Runtime.getHeapUsage',
-  'Emulation.setDeviceMetricsOverride', 'Emulation.clearDeviceMetricsOverride',
-  'Network.enable', 'Network.getCookies', 'Performance.getMetrics',
-]);
+import { callChrome, describeChrome } from './chrome-api';
+import { watchStream, readStream, closeStream, closeSessionStreams, endTabStreams } from './streams';
+import { captureExtensionLogs, extensionLogs } from './logs';
 
+captureExtensionLogs();
 const host = new NativeHost((cmd) => executeWithJournal(cmd, handleCommand));
-const sessions = new SessionManager((e) => host.event(e));
+const sessions = new SessionManager((e) => { if (e.kind === 'session_released') closeSessionStreams(e.session); host.event(e); });
 
+chrome.tabs.onRemoved.addListener(tabId => endTabStreams(tabId, 'Tab closed'));
+chrome.debugger.onDetach.addListener(source => { if (source.tabId && !(source as { sessionId?: string }).sessionId) endTabStreams(source.tabId, 'Debugger detached; events may have been lost. Create a new watch.'); });
 executor.registerListeners();
 registerFrameTracking();
 chrome.tabs.onRemoved.addListener((tabId) => forgetEngineTab(tabId));
@@ -46,8 +42,8 @@ function normalizeUrl(url?: string): string {
   try { const p = new URL(url); if ((p.protocol === 'https:' && p.port === '443') || (p.protocol === 'http:' && p.port === '80')) p.port = ''; return `${p.protocol}//${p.host}${p.pathname === '/' ? '' : p.pathname}${p.search}${p.hash}`; } catch { return url; }
 }
 function commandTimeoutMs(cmd: Command): number | undefined {
-  if (cmd.deadlineAt) return Math.max(1000, cmd.deadlineAt - Date.now() - 500);
-  return undefined;
+  const remaining = cmd.deadlineAt ? Math.max(1, cmd.deadlineAt - Date.now() - 500) : 30_000;
+  return Math.min(cmd.timeoutMs ?? remaining, remaining);
 }
 async function pageScoped(id: string, tabId: number, data: unknown): Promise<Result> {
   return { id, ok: true, data, page: identity.pageId(tabId) };
@@ -65,8 +61,20 @@ function errorResult(id: string, err: unknown): Result {
 async function handleCommand(cmd: Command): Promise<Result> {
   await sessions.ready();
   const s = sessionFor(cmd);
+  await sessions.touch(s);
   try {
     switch (cmd.action) {
+      case 'chrome-call': return { id: cmd.id, ok: true, data: await callChrome(cmd.chromeMethod ?? '', cmd.chromeArgs ?? [], sessions, s) };
+      case 'chrome-describe': return { id: cmd.id, ok: true, data: await describeChrome(cmd.chromeMethod ?? '') };
+      case 'stream-watch': {
+        if (!cmd.streamSource) throw new SessionError('invalid_args', 'Missing streamSource');
+        const tabId = ['chrome', 'extension'].includes(cmd.streamSource) ? undefined : await sessions.resolveTab(s, cmd.page);
+        return { id: cmd.id, ok: true, data: await watchStream(s.key, cmd.streamSource, cmd.eventName, cmd.streamOptions, tabId) };
+      }
+      case 'stream-read': return { id: cmd.id, ok: true, data: readStream(s.key, cmd.streamId ?? '', cmd.streamRead) };
+      case 'stream-close': closeStream(s.key, cmd.streamId ?? ''); return { id: cmd.id, ok: true, data: null };
+      case 'streams-reset': closeSessionStreams(s.key); return { id: cmd.id, ok: true, data: null };
+      case 'extension-logs': return { id: cmd.id, ok: true, data: extensionLogs.read(cmd.streamRead) };
       case 'ping': return { id: cmd.id, ok: true, data: { pong: true, version: chrome.runtime.getManifest().version } };
       case 'exec': return await handleExec(cmd, s);
       case 'act': {
@@ -104,7 +112,7 @@ async function handleCommand(cmd: Command): Promise<Result> {
       case 'claim': { if (!cmd.claim) return { id: cmd.id, ok: false, error: 'Missing claim' }; const r = await sessions.claimUserTab(s, cmd.claim); return { id: cmd.id, ok: true, page: r.page, data: { url: r.tab.url, title: r.tab.title, tabId: r.tabId } }; }
       case 'close-user-tabs': { if (!cmd.tabIds?.length) return { id: cmd.id, ok: false, error: 'Missing tabIds', errorCode: 'invalid_args' }; return { id: cmd.id, ok: true, data: await sessions.closeUserTabs(cmd.tabIds) }; }
       case 'mark': { if (!cmd.page) return { id: cmd.id, ok: false, error: 'Missing page' }; const tabId = await identity.resolveTabId(cmd.page); sessions.mark(s, tabId, cmd.mark ?? null); return { id: cmd.id, ok: true, data: { mark: cmd.mark ?? null } }; }
-      case 'session-finalize': return { id: cmd.id, ok: true, data: await sessions.finalize(s, cmd.keep ?? []) };
+      case 'session-finalize': closeSessionStreams(s.key); return { id: cmd.id, ok: true, data: await sessions.finalize(s, cmd.keep ?? []) };
       // ── human visibility ──
       case 'cursor': { if (typeof cmd.x !== 'number' || typeof cmd.y !== 'number') return { id: cmd.id, ok: false, error: 'Missing x/y' }; const tabId = await sessions.resolveTab(s, cmd.page); const arrived = await sessions.cursor(s, tabId, cmd.x, cmd.y, cmd.waitForArrival !== false, cmd.timeoutMs ?? 1200); return pageScoped(cmd.id, tabId, { arrived }); }
       case 'dialog': {
@@ -115,7 +123,7 @@ async function handleCommand(cmd: Command): Promise<Result> {
         const dialog = await executor.handleDialog(tabId, op === 'accept', cmd.text);
         return pageScoped(cmd.id, tabId, { handled: op, dialog });
       }
-      case 'console': { const tabId = await sessions.resolveTab(s, cmd.page); await executor.ensureAttached(tabId, s.surface === 'browser'); return pageScoped(cmd.id, tabId, executor.readConsole(tabId, { afterSequence: cmd.afterSequence, limit: cmd.limit, levels: cmd.levels, filter: cmd.filter })); }
+      case 'console': { const tabId = await sessions.resolveTab(s, cmd.page); await executor.ensureAttached(tabId, s.surface === 'browser'); return pageScoped(cmd.id, tabId, executor.readConsole(tabId, cmd.streamRead)); }
       case 'history': {
         const tabId = await sessions.resolveTab(s, cmd.page);
         const op = cmd.historyOp ?? 'reload';
@@ -131,7 +139,9 @@ async function handleCommand(cmd: Command): Promise<Result> {
       default: return { id: cmd.id, ok: false, error: `Unknown action: ${String(cmd.action)}`, errorCode: 'unknown_action' };
     }
   } catch (err) {
-    return errorResult(cmd.id, err);
+    const failure = errorResult(cmd.id, err);
+    extensionLogs.push({ level: 'warn', event: cmd.action, message: `${failure.errorCode}: ${failure.error}` });
+    return failure;
   }
 }
 
@@ -277,14 +287,12 @@ async function handleCookies(cmd: Command): Promise<Result> {
 
 async function handleCdp(cmd: Command, s: Session): Promise<Result> {
   if (!cmd.cdpMethod) return { id: cmd.id, ok: false, error: 'Missing cdpMethod' };
-  if (!CDP_ALLOWLIST.has(cmd.cdpMethod)) return { id: cmd.id, ok: false, error: `CDP method not permitted: ${cmd.cdpMethod}`, errorCode: 'cdp_not_allowed' };
+  executor.checkPublicCdp(cmd.cdpMethod);
   const tabId = await sessions.resolveTab(s, cmd.page);
   await executor.ensureAttached(tabId, s.surface === 'browser');
   const params = cmd.cdpParams ?? {};
-  const routeFrameId = typeof params.frameId === 'string' && params.sessionId === 'target' ? params.frameId : undefined;
-  const { sessionId: _sid, frameId: _fid, targetUrl, ...rest } = params as Record<string, unknown>;
-  const data = routeFrameId
-    ? await executor.sendCommandInFrameTarget(tabId, routeFrameId, cmd.cdpMethod, rest, s.surface === 'browser', commandTimeoutMs(cmd) ?? 30_000)
-    : await executor.sendDebuggerCommand({ tabId }, cmd.cdpMethod, _fid !== undefined ? { ...rest, frameId: _fid } : rest, commandTimeoutMs(cmd));
+  const data = cmd.cdpTarget
+    ? await executor.sendCommandInFrameTarget(tabId, cmd.cdpTarget.frameId, cmd.cdpMethod, params, s.surface === 'browser', commandTimeoutMs(cmd) ?? 30_000)
+    : await executor.sendDebuggerCommand({ tabId }, cmd.cdpMethod, params, commandTimeoutMs(cmd));
   return pageScoped(cmd.id, tabId, data);
 }
