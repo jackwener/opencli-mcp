@@ -15,7 +15,7 @@ The core loop and the discipline that makes it reliable. Use `js` and await ever
 4. **Branch on `error.code`, never message text.** Full families and what to do for each are in the `errors` doc.
 5. **iframes:** add `frame` to the target — `{frame:"#checkout", role:"button", name:"Pay"}`, `frame:0`, or a chain
    outermost-first `frame:["#checkout", 0]` / `"#checkout >> iframe.card"`. Same-origin, data:/srcdoc, and cross-origin
-   are entered the same way.
+   are entered the same way. `observe()` includes child observations in `frames`, each with a reusable `frame` path and local refs. Copy that path into `target.frame` for `find/read/act` or `frame` for `observe/read`. `framesComplete:false` and `unavailable` identify a failed or bounded child capture. Observe that frame directly to retry; `includeFrames:false` limits observation to the selected document. Observations never scroll iframe owners.
 6. **Don't re-`goto` a URL the tab is already on** (it reloads and loses form state); use `await tab.act({action:"reload"})`
    when a reload is intended.
 7. **`tab.evaluate(js)` is read-only page scope.** Writes go through `tab.act()`.
@@ -41,3 +41,25 @@ The core loop and the discipline that makes it reliable. Use `js` and await ever
     browser control is interrupted by the user or the extension, say so plainly ("browser use was stopped in Chrome")
     without quoting runtime error text.
 14. **Popup and download outcomes:** If an action returns `openedTabs`, get handles for its `tab` ids with `await browser.tabs.get(id)`; each is a child of the source tab observed while the action ran and already belongs to the session. A `pending:true` child has no page handle yet; call `browser.tabs.list()` and match its numeric `tabId` to obtain the handle when ready. For a download, keep `download.afterSequence` from the action, then call `await tab.download(afterSequence)` on the same tab. A `download.started` entry proves that page began a download, while `downloaded:true` means Chrome reports a completed file whose new start event was paired with the page event by URL. `not_started`, `unconfirmed`, `ambiguous`, and `cursor_expired` do not prove completion. Chrome's download event has no source-tab id, so a file match is reported with `association:"url+event"` rather than as exact provenance.
+
+## Choose an observation, then read precisely
+
+- Older extensions retain basic main-frame ARIA with a warning; DOM and frame-scoped reads require the new extension capability. Host and extension package versions need not match.
+- `tab.observe()` is the ARIA action map, including child-frame observations. Each frame has its own ref space; never use a child's `eN` in the parent frame. `since` uses the returned `snapshotId` and diffs each captured frame independently.
+- `tab.observe({format:'dom'})` independently reads visible controls and live attributes, including open shadow roots. It is viewport-scoped by default; `viewport:false` covers rendered controls in the selected document. It does not discover every delegated event handler or unrendered virtual row.
+- DOM `total/start/nextStart` describe a live list per frame. Continue with `observe({format:'dom',frame,start:nextStart})`; page changes can change that list. `truncated:true` on an entry means some preview fields were shortened.
+- `tab.read({target:{ref,frame}})` reads one element's full current text, accessible name, selected attributes and live form state without scrolling. This is the detail path for a clipped DOM preview or long ARIA label. It uses strict locator resolution, just like actions. For document text, `tab.read({frame})` performs the existing bounded scroll-and-read scan; its `readId/start` continuation is tied to that frame.
+- `tab.find({query,frame})` searches DOM text, attributes and current values independently of ARIA. It returns locator candidates; it is not an exhaustive text export. Exact selector/role/label/ref lookup also accepts `frame`.
+- Use `screenshot()` for visual relationships, charts and canvas. A snapshot is not evidence about data not yet rendered. Scroll a virtualized region or inspect an observed network response when the task requires more data.
+
+```js
+let overview = await tab.observe();
+// Choose a child based on its owner metadata and observed content.
+let billing = overview.frames.find(f => f.owner.name === 'billing');
+let controls = await tab.observe({format:'dom', frame:billing.frame});
+// Choose a ref from that result, then use the same frame path throughout.
+let amount = controls.dom.entries.find(e => e.attrs.placeholder === 'Amount');
+await tab.read({target:{frame:billing.frame, ref:amount.ref}});
+await tab.act({action:'fill', target:{frame:billing.frame, ref:amount.ref}, value:'42'});
+await tab.read({target:{frame:billing.frame, ref:amount.ref}});
+```

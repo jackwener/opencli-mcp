@@ -7,7 +7,7 @@
  */
 import type { ActSpec, ActResult, ActTarget, FrameStep } from '../protocol.js';
 import { ENGINE_GLOBAL, PAGE_GLOBAL, type ResolveOutcome, type Resolved, type PointInfo, type SelectResult } from './page-contract.js';
-export { ENGINE_GLOBAL, PAGE_GLOBAL, ACT_MARK, FRAME_MARK } from './page-contract.js';
+export { ENGINE_GLOBAL, PAGE_GLOBAL, ACT_MARK } from './page-contract.js';
 
 /** Evaluate once per world: installs Playwright's InjectedScript as globalThis.__opencliInjected, then the page module. */
 export function installEngineJs(injectedSource: string, pageModuleSource: string): string {

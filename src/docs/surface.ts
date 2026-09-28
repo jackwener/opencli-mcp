@@ -55,6 +55,8 @@ export function selectApiReference(source: string, member: string): string | nul
     const start = lines.findIndex(line => /^  (\w+)\??(?:\(|:)/.exec(line)?.[1] === method);
     if (start < 0) return null;
     let end = start + 1;
+    // Keep adjacent overloads together; a focused read reference must show both element and document reads.
+    while (end < lines.length && /^  (\w+)\(/.exec(lines[end])?.[1] === method) end++;
     if (/\{\s*(?:\/\/.*)?$/.test(lines[start])) { while (end < lines.length && lines[end] !== '  };') end++; end++; }
     selected = `${lines[0]}\n${lines.slice(start, end).join('\n')}\n}`;
   }

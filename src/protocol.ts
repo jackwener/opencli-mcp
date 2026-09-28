@@ -64,6 +64,8 @@ export interface Command {
   cdpMethod?: string;
   cdpParams?: Record<string, unknown>;
   frameIndex?: number;
+  /** Engine-world page calls use the same frame path as actions. */
+  frame?: FrameStep | FrameStep[];
   deadlineAt?: number;
   /** session-name */
   name?: string;

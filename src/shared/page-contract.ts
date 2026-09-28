@@ -7,8 +7,6 @@ export const ENGINE_GLOBAL = '__opencliInjected';
 export const PAGE_GLOBAL = '__opencliPage';
 /** Attribute the resolver sets on the element an action is about to touch. */
 export const ACT_MARK = 'data-opencli-act';
-/** Attribute the frame probe sets on the <iframe> the edge is about to route into. */
-export const FRAME_MARK = 'data-opencli-frame';
 
 export interface ResolveArgs {
   selector: string;
@@ -61,6 +59,15 @@ export interface AriaArgs {
   /** character budget before branches with a ref collapse. The host uses the default; tests pass a small one. */
   budget?: number;
 }
+
+/** Compact DOM evidence. Truncated fields can be read exactly with tab.read({target:{ref}}). */
+export interface DomEntry { ref: string; tag: string; text: string; attrs: Record<string, string>; truncated: boolean }
+export interface DomSnapshot { entries: DomEntry[]; total: number; start: number; nextStart?: number; scope: 'viewport' | 'document' }
+export interface ObserveFrameArgs extends AriaArgs { format?: 'aria' | 'dom'; start?: number; limit?: number }
+export interface FrameOwner { ref: string; id: string; name: string; src: string }
+export interface FrameObservation { state?: string; dom?: DomSnapshot; children: FrameOwner[]; warnings?: string[] }
+/** Full current DOM evidence for one element; no preview clipping. */
+export interface ElementDetails { ref: string; tag: string; name: string; text: string; attrs: Record<string, string> }
 
 export interface ReadTextArgs { maxChars?: number; start?: number; readId?: string; maxSteps?: number; waitMs?: number }
 /** Linear document text from one bounded scan. `readId` and `nextStart` continue that same capture. */

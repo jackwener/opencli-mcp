@@ -73,7 +73,7 @@ it('runs discovery → observe → act → verify → cleanup through MCP and th
     newTab: async () => 'page-one', getCurrentUrl: async () => 'https://example.com/', evaluate: async () => 'Example',
     screenshot: async () => 'aW1hZ2U=',
     tabs: async () => [{ page: 'page-one', tabId: 1, state: 'active' }],
-    pageCall: async (method: string) => method === 'aria' ? (clicked ? '- heading "Done"' : '- button "Continue" [ref=e1]') : null,
+    pageCall: async (method: string) => method === 'observeFrame' ? { state: clicked ? '- heading "Done"' : '- button "Continue" [ref=e1]', children: [] } : null,
     act: async () => { clicked = true; return { ok: true, kind: 'click', matches_n: 1, method: 'cdp', ref: 'e1' }; },
     expect: async () => ({ ok: clicked, failed: clicked ? [] : ['not clicked'] }),
     finalize: async () => { finalized = true; return { closed: ['page-one'], kept: [], failed: [] }; },
@@ -99,6 +99,9 @@ it('runs discovery → observe → act → verify → cleanup through MCP and th
     const observeDoc = (await call('docs_get', { name: 'api-reference', member: 'Tab.observe' })).text;
     expect(observeDoc).toContain('interface ObserveOptions');
     expect(observeDoc).not.toContain('  screenshot(');
+    const readDoc = (await call('docs_get', { name: 'api-reference', member: 'Tab.read' })).text;
+    expect(readDoc).toContain('read(opts: ReadElementOptions)');
+    expect(readDoc).toContain('read(opts?: ReadOptions)');
     const opened = await call('js', { code: 'let tab = await browser.tabs.new("https://example.com/"); tab' });
     expect(opened.body, opened.text).toEqual({ ok: true, value: { type: 'Tab', id: 'page-one' } });
     expect((await call('js', { code: 'typeof tab' })).body.value).toBe('object');

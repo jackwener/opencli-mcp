@@ -3,8 +3,8 @@ import type { ExtensionBridge } from '../host/bridge.js';
 import { BrowserCommandError } from '../host/bridge.js';
 import { wrapForEval, waitForDomStableJs, networkRequestsJs } from './browser-helpers.js';
 import type { RuntimePage } from './page-types.js';
-import type { Command, ActSpec, ActResult, DialogInfo, ConsoleEntry, CloseUserTabsResult, DownloadWaitResult } from '../protocol.js';
-import { pageCallJs, ActError } from '../shared/engine.js';
+import type { Command, ActSpec, ActResult, DialogInfo, ConsoleEntry, CloseUserTabsResult, DownloadWaitResult, FrameStep } from '../protocol.js';
+import { pageCallJs, ActError, PAGE_GLOBAL, frameSteps } from '../shared/engine.js';
 import type { Expectation, CheckResult } from '../shared/page-contract.js';
 
 export interface ExtensionPageOptions {
@@ -211,7 +211,25 @@ class ExtensionPage implements ExtensionRuntimePage {
       if (!(err instanceof BrowserCommandError)) throw err; /* overlay is best-effort */
     }
   }
-  async pageCall(fn: string, args?: unknown, timeoutMs?: number): Promise<unknown> { return (await this.send('exec', { code: pageCallJs(fn, args), world: 'engine', ...(timeoutMs && { timeoutMs }) })).data; }
+  async pageCall(fn: string, args?: unknown, timeoutMs?: number, frame?: FrameStep | FrameStep[]): Promise<unknown> {
+    const scoped = frameSteps(frame).length > 0;
+    const call = pageCallJs(fn, args);
+    // Probe the actual API, not a package version. Older extensions can still provide the core ARIA overview.
+    // Their exec ignores frame paths, so fail explicitly before a scoped read could run in the wrong document.
+    const code = `(() => {
+      const page = globalThis.${PAGE_GLOBAL};
+      if (typeof page.observeFrame !== 'function') {
+        if (${scoped}) throw new Error('Frame-scoped observation/read needs an updated extension. Basic tab.observe() remains available.');
+        if (${JSON.stringify(fn)} === 'observeFrame') {
+          if (${JSON.stringify((args as { format?: string } | undefined)?.format)} === 'dom') throw new Error('DOM observation needs an updated extension. Use tab.observe() for ARIA meanwhile.');
+          return {state: page.aria(${JSON.stringify(args ?? {})}), children: [], warnings: ['Extension provides main-frame ARIA only. Update it for child-frame and DOM observations.']};
+        }
+      }
+      if (typeof page[${JSON.stringify(fn)}] !== 'function') throw new Error('This page API needs an updated extension: ' + ${JSON.stringify(fn)});
+      return ${call};
+    })()`;
+    return (await this.send('exec', { code, world: 'engine', ...(frame !== undefined && { frame }), ...(timeoutMs && { timeoutMs }) })).data;
+  }
   /** Live URL first; the sticky cache is only the fallback while a navigation is in flight. */
   async getCurrentUrl(): Promise<string | null> {
     try { const u = await this.evaluate('location.href') as unknown; if (typeof u === 'string' && u) { this._lastUrl = u; return u; } }

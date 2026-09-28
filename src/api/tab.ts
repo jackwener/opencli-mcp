@@ -8,8 +8,8 @@ import { checkActInput, checkExpect } from './action-input.js';
 import { ariaDiff } from './diff.js';
 import { networkDetail, networkSummary } from './network.js';
 import { ARIA_BUDGET, collapseAria } from '../shared/aria-collapse.js';
-import { targetToSelector, fallbackSelector } from '../shared/engine.js';
-import type { FindEntry, FindResult, QueryFindResult, ElementAtResult, Expectation, CheckResult, ReadTextResult } from '../shared/page-contract.js';
+import { targetToSelector, fallbackSelector, frameSteps } from '../shared/engine.js';
+import type { FindEntry, FindResult, QueryFindResult, ElementAtResult, Expectation, CheckResult, ReadTextResult, FrameObservation, FrameOwner, DomSnapshot, ElementDetails, ResolveFail } from '../shared/page-contract.js';
 import type { DialogInfo, DownloadWaitResult, FrameStep } from '../protocol.js';
 import type { SessionContext } from './context.js';
 
@@ -38,9 +38,38 @@ export interface ActionOutcome {
   method?: 'dom';
 }
 
-export interface ObserveOptions { mode?: 'state' | 'screenshot' | 'both'; /** Return a diff only against this exact snapshot id; otherwise return the full state. */ since?: string; /** only the subtree on screen right now (what a screenshot shows). Not a page of the full tree. */ viewport?: boolean; /** open one branch of the action map (`eN` from a collapsed line). Ignores viewport. */ ref?: string; /** overlay eN labels on the screenshot */ annotate?: boolean; fullPage?: boolean }
-
-export interface ReadOptions { /** stop after this many characters. Default 60000. */ maxChars?: number; /** character offset returned as nextStart by a previous read */ start?: number; /** capture id returned by that same read */ readId?: string }
+export interface ObserveOptions {
+  mode?: 'state' | 'screenshot' | 'both';
+  /** ARIA overview (default) or independent visible controls and live DOM attributes. */
+  format?: 'aria' | 'dom';
+  /** Frame path from an observation; identical to target.frame in act/find/read. */
+  frame?: FrameStep | FrameStep[];
+  /** Return a diff only against this exact snapshot id; otherwise return full state. ARIA only. */
+  since?: string;
+  /** ARIA defaults to the whole document; DOM defaults to the viewport. */
+  viewport?: boolean;
+  /** Open a branch in the selected frame. */
+  ref?: string;
+  /** DOM pagination within the selected frame. The live page can change between calls. */
+  start?: number;
+  limit?: number;
+  /** Include child frames, without scrolling. Default true. */
+  includeFrames?: boolean;
+  /** Overlay main-frame eN labels on the screenshot. */
+  annotate?: boolean;
+  fullPage?: boolean;
+}
+export interface ObservedContent { state?: string; dom?: DomSnapshot; warnings?: string[]; diff?: boolean; changed?: { added: number; removed: number; changed?: number } }
+export interface ObservedFrame extends ObservedContent { frame: FrameStep[]; owner: FrameOwner; unavailable?: string }
+export interface ObserveResult extends ObservedContent {
+  url: string | null; title: string | null; snapshotId?: string; image?: ImageValue;
+  /** Refs are local to each frame. Copy this path into observe.frame or target.frame. */
+  frames?: ObservedFrame[];
+  /** False if a discovered frame could not be captured or the bounded traversal stopped. */
+  framesComplete?: boolean;
+}
+export interface ReadOptions { /** stop after this many characters. Default 60000. */ maxChars?: number; /** character offset returned as nextStart by a previous read */ start?: number; /** capture id returned by that same read */ readId?: string; frame?: FrameStep | FrameStep[] }
+export interface ReadElementOptions { /** Exact current text, attributes and form values for one locator. No scrolling or preview clipping. */ target: Target }
 
 export interface ImageValue { __image: true; mimeType: string; base64: string }
 
@@ -121,30 +150,66 @@ export class Tab {
   /** Keep this tab open and give up this session's control of it. */
   async release(): Promise<void> { await this.use((p) => p.releaseTab(this.id)); this.closed = true; this.ctx.rt.forgetPage(this.ctx.sessionId, this.id); }
 
-  async observe(opts: ObserveOptions = {}): Promise<{ url: string | null; title: string | null; state?: string; snapshotId?: string; diff?: boolean; changed?: { added: number; removed: number; changed?: number }; image?: ImageValue }> {
+  /** ARIA overview by default; format:'dom' reveals visible controls and live attributes. Child-frame refs must be used with their returned frame path. */
+  async observe(opts: ObserveOptions = {}): Promise<ObserveResult> {
     const mode = opts.mode ?? 'state';
     return this.use(async (page) => {
-      const meta = await this.info(page);
-      const out: { url: string | null; title: string | null; state?: string; snapshotId?: string; diff?: boolean; changed?: { added: number; removed: number; changed?: number }; image?: ImageValue } = { ...meta };
+      const out: ObserveResult = { ...await this.info(page) };
       if (mode === 'state' || mode === 'both') {
-        // one state source: Playwright's aria snapshot (credential values redacted); its [ref=eN] are the act targets
-        let text = String(await page.pageCall('aria', { viewport: Boolean(opts.viewport) && !opts.ref, ...(opts.ref ? { ref: opts.ref } : {}) }));
-        const key = `${this.id}:${opts.viewport && !opts.ref ? 'vp' : 'all'}:${opts.ref ?? ''}`;
-        const prev = this.ctx.state.lastObserve.get(key);
         const snapshotId = `${++this.ctx.state.observationSeq}`;
-        this.ctx.state.lastObserve.set(key, { id: snapshotId, text });
         out.snapshotId = snapshotId;
-        const diffOn = Boolean(opts.since && prev?.id === opts.since);
-        // the tail line ("Focused: …") is state, not structure: diff the tree, then re-append the current focus
-        const split = (t: string) => { const i = t.lastIndexOf('\nFocused: '); return i >= 0 ? [t.slice(0, i), t.slice(i + 1)] : [t, '']; };
-        const [tree, focus] = split(text); const [prevTree] = prev ? split(prev.text) : [''];
-        if (diffOn && prev && prevTree !== tree) {
-          const d = ariaDiff(prevTree, tree);
-          if (d.changedRatio < 0.6) { out.diff = true; out.changed = { added: d.added, removed: d.removed, changed: d.changed }; text = `${d.text || '(no visible change)'}${focus ? `\n${focus}` : ''}`; }
-        } else if (diffOn && prev && prevTree === tree) { out.diff = true; out.changed = { added: 0, removed: 0, changed: 0 }; text = `There has been no change since the last observe.${focus ? `\n${focus}` : ''}`; }
-        // Diff compared the whole tree. Collapse only the copy the model sees, so a change inside a folded branch is not "no change".
-        const unchanged = out.diff === true && out.changed?.added === 0 && out.changed?.removed === 0 && (out.changed?.changed ?? 0) === 0;
-        out.state = unchanged ? text : collapseAria(text, ARIA_BUDGET).text;
+        const base = frameSteps(opts.frame);
+        const viewport = opts.ref ? false : opts.viewport ?? (opts.format === 'dom');
+        const render = (capture: FrameObservation, frame: FrameStep[], ref?: string): ObservedContent => {
+          if (capture.dom) return { dom: capture.dom };
+          let text = capture.state ?? '';
+          const key = `${this.id}:${JSON.stringify(frame)}:${viewport ? 'vp' : 'all'}:${ref ?? ''}`;
+          const prev = this.ctx.state.lastObserve.get(key);
+          this.ctx.state.lastObserve.set(key, { id: snapshotId, text });
+          const content: ObservedContent = { ...(capture.warnings && { warnings: capture.warnings }) };
+          if (opts.since && prev?.id === opts.since) {
+            const split = (value: string) => { const at = value.lastIndexOf('\nFocused: '); return at < 0 ? [value, ''] : [value.slice(0, at), value.slice(at + 1)]; };
+            const [tree, focus] = split(text);
+            const d = ariaDiff(split(prev.text)[0], tree);
+            if (d.changedRatio < 0.6 || prev.text === text) {
+              content.diff = true;
+              content.changed = { added: d.added, removed: d.removed, changed: d.changed };
+              text = (d.text || 'There has been no change since the last observe.') + (focus ? `\n${focus}` : '');
+            }
+          }
+          content.state = collapseAria(text, ARIA_BUDGET).text;
+          return content;
+        };
+        const capture = (frame: FrameStep[], ref?: string, root = false) => page.pageCall('observeFrame', {
+          format: opts.format ?? 'aria', viewport, ...(ref && { ref }),
+          ...(root && { start: opts.start, limit: opts.limit }),
+        }, 5000, frame) as Promise<FrameObservation>;
+        const root = await capture(base, opts.ref, true);
+        Object.assign(out, render(root, base, opts.ref));
+        if (root.warnings?.length) out.framesComplete = false;
+        if (opts.includeFrames !== false && root.children.length) {
+          out.frames = [];
+          out.framesComplete = true;
+          let captured = 0;
+          const visit = async (parent: FrameStep[], owners: FrameOwner[], depth: number): Promise<void> => {
+            for (const owner of owners) {
+              const frame = [...parent, `aria-ref=${owner.ref}`];
+              const result: ObservedFrame = { frame, owner };
+              out.frames!.push(result);
+              if (captured >= 24 || depth >= 8) result.unavailable = 'Frame traversal limit reached. Observe this frame directly.';
+              else {
+                captured++;
+                try {
+                  const child = await capture(frame);
+                  Object.assign(result, render(child, frame));
+                  await visit(frame, child.children, depth + 1);
+                } catch (error) { result.unavailable = String((error as Error).message ?? error); }
+              }
+              if (result.unavailable) out.framesComplete = false;
+            }
+          };
+          await visit(base, root.children, 0);
+        }
       }
       if (mode === 'screenshot' || mode === 'both') out.image = await this.screenshotOn(page, { annotate: opts.annotate, fullPage: opts.fullPage });
       return out;
@@ -163,27 +228,37 @@ export class Tab {
     } finally { if (opts.annotate) await page.pageCall('unannotate').catch(() => {}); }
   }
 
-  async find(target: (Target & { limit?: number }) | { query: string; limit?: number }): Promise<FindResult | ElementAtResult | QueryFindResult> {
+  async find(target: (Target & { limit?: number }) | { query: string; limit?: number; frame?: FrameStep | FrameStep[] }): Promise<FindResult | ElementAtResult | QueryFindResult> {
     return this.use(async (page) => {
-      if ('query' in target) return await page.pageCall('findByQuery', { query: target.query, limit: target.limit ?? 20 }) as QueryFindResult;
+      if ('query' in target) return await page.pageCall('findByQuery', { query: target.query, limit: target.limit ?? 20 }, undefined, target.frame) as QueryFindResult;
       // a viewport point (screenshot coordinates) → the element there and its ancestors, as locators
-      if ('x' in target) return await page.pageCall('elementAt', { x: target.x, y: target.y }) as ElementAtResult;
+      if ('x' in target) return await page.pageCall('elementAt', { x: target.x, y: target.y }, undefined, target.frame) as ElementAtResult;
       // same engine and the same compiled selector as act: what find lists is exactly what act would resolve
       const spec = target as Record<string, unknown>;
       const selector = targetToSelector(spec);
       if (!selector) throw new ActionError('invalid_target', 'find needs a selector, an aria ref (eN), a semantic locator (role/name/label/text/testid), or a point {x,y}', 'Pass one of: {ref} from observe, {selector}, {role,name}, {label}, {text}, {testid}, or {x,y}.');
-      return await page.pageCall('find', { selector, fallback: fallbackSelector(spec), limit: target.limit ?? 20 }) as FindResult;
+      return await page.pageCall('find', { selector, fallback: fallbackSelector(spec), limit: target.limit ?? 20 }, undefined, target.frame) as FindResult;
     });
   }
 
   /**
-   * Linear text of a bounded document. Scrolls to mount lazy content, retains repeated text from distinct nodes, restores the scroll position.
-   * No refs. A feed that grows without a bottom returns reason `unbounded` and the head already read — do not call it again to finish the feed.
+   * With target: exact current element text, attributes and live values, without scrolling.
+   * Otherwise: bounded document text scan (including open shadow roots), restores scroll; readId/nextStart continue the same capture.
+   * A growing feed returns reason `unbounded`; the scan stops rather than chasing an endless bottom.
    */
-  async read(opts: ReadOptions = {}): Promise<ReadTextResult> {
+  async read(opts: ReadElementOptions): Promise<ElementDetails>;
+  async read(opts?: ReadOptions): Promise<ReadTextResult>;
+  async read(opts: ReadOptions | ReadElementOptions = {}): Promise<ReadTextResult | ElementDetails> {
     return this.use(async (page) => {
+      if ('target' in opts) {
+        const selector = targetToSelector(opts.target);
+        if (!selector) throw new ActionError('invalid_target', 'Exact read needs a ref or locator.', 'Use find({x,y}) first for a screenshot coordinate.');
+        const result = await page.pageCall('readElement', { selector, fallback: fallbackSelector(opts.target), limit: 1 }, undefined, opts.target.frame) as ElementDetails | ResolveFail;
+        if ('error' in result) throw new ActionError(result.error.code, result.error.message, result.error.hint);
+        return result;
+      }
       if (opts.start !== undefined && !opts.readId) throw new ActionError('invalid_args', 'Continuing a read requires both readId and start.', 'Copy readId and nextStart from the previous tab.read result.');
-      const r = await page.pageCall('readText', opts) as ReadTextResult;
+      const r = await page.pageCall('readText', opts, undefined, opts.frame) as ReadTextResult;
       if (r.reason === 'stale') throw new ActionError('stale_read', 'This page no longer has that text capture.', 'Call tab.read without readId to start a new capture.');
       return r;
     });

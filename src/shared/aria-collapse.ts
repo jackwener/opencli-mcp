@@ -1,6 +1,6 @@
 /** Character budget for the action map returned to the model. The cached tree used for diff stays whole. */
 export const ARIA_BUDGET = 24_000;
-export const COLLAPSE_NOTE = 'Collapsed branches keep their [ref]. Observe again with that ref to open one branch. This tree is the action map; read the document with tab.read().';
+export const COLLAPSE_NOTE = 'Collapsed branches keep their [ref]. Observe again with that ref and the same frame path to open one branch. This tree is the action map; read the document with tab.read().';
 
 function lineIndent(line: string): number { return line.length - line.trimStart().length; }
 

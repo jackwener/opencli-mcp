@@ -1,5 +1,5 @@
 /** The transport surface used by the browser object API. */
-import type { ActSpec, ActResult, DialogInfo, ConsoleEntry, DownloadWaitResult } from '../protocol.js';
+import type { ActSpec, ActResult, DialogInfo, ConsoleEntry, DownloadWaitResult, FrameStep } from '../protocol.js';
 import type { Expectation, CheckResult } from '../shared/page-contract.js';
 
 export interface ScreenshotOptions { format?: 'png' | 'jpeg'; quality?: number; fullPage?: boolean; width?: number; height?: number }
@@ -40,6 +40,6 @@ export interface RuntimePage {
   expect(what: Expectation, opts?: { timeoutMs?: number }): Promise<CheckResult>;
   /** Accessibility snapshot text for browser sessions and adapters. */
   aria(opts?: { viewport?: boolean }): Promise<string>;
-  /** Call one function of the page-side module (extension/src/page) in the tab's main frame world. */
-  pageCall(fn: string, args?: unknown, timeoutMs?: number): Promise<unknown>;
+  /** Call one function of the page-side module (extension/src/page) in the main frame or a frame path, without scrolling. */
+  pageCall(fn: string, args?: unknown, timeoutMs?: number, frame?: FrameStep | FrameStep[]): Promise<unknown>;
 }

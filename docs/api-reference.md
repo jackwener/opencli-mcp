@@ -54,10 +54,11 @@ class Tab {
   reload(): Promise<void>;
   close(): Promise<void>; // Close this tab, whether it was opened or claimed by this session.
   release(): Promise<void>; // Keep this tab open and give up this session's control of it.
-  observe(opts?: ObserveOptions): Promise<{ url: string | null; title: string | null; state?: string; snapshotId?: string; diff?: boolean; changed?: { added: number; removed: number; changed?: number; }; image?: ImageValue; }>;
+  observe(opts?: ObserveOptions): Promise<ObserveResult>; // ARIA overview by default; format:'dom' reveals visible controls and live attributes. Child-frame refs must be used with their returned frame path.
   screenshot(opts?: { fullPage?: boolean; annotate?: boolean; format?: "png" | "jpeg"; quality?: number; }): Promise<ImageValue>;
-  find(target: (Target & { limit?: number; }) | { query: string; limit?: number; }): Promise<FindResult | ElementAtResult | QueryFindResult>;
-  read(opts?: ReadOptions): Promise<ReadTextResult>; // Linear text of a bounded document. Scrolls to mount lazy content, retains repeated text from distinct nodes, restores the scroll position. No refs. A feed that grows without a bottom returns reason `unbounded` and the head already read — do not call it again to finish the feed.
+  find(target: (Target & { limit?: number; }) | { query: string; limit?: number; frame?: FrameStep | Array<FrameStep>; }): Promise<FindResult | ElementAtResult | QueryFindResult>;
+  read(opts: ReadElementOptions): Promise<ElementDetails>; // With target: exact current element text, attributes and live values, without scrolling. Otherwise: bounded document text scan (including open shadow roots), restores scroll; readId/nextStart continue the same capture. A growing feed returns reason `unbounded`; the scan stops rather than chasing an endless bottom.
+  read(opts?: ReadOptions): Promise<ReadTextResult>; // With target: exact current element text, attributes and live values, without scrolling. Otherwise: bounded document text scan (including open shadow roots), restores scroll; readId/nextStart continue the same capture. A growing feed returns reason `unbounded`; the scan stops rather than chasing an endless bottom.
   act(opts: ActOptions): Promise<ActionOutcome>; // wait + act in one call at the runtime edge: locate → wait actionable → hit-test → real input → settle. `method:'dom'` skips the mouse event.
   webmcp: { // WebMCP: tools the page itself registers via navigator.modelContext (page-provided tool source).
     list(): Promise<Array<{ name: string; description?: string; inputSchema?: unknown; }>>;
@@ -112,9 +113,13 @@ interface ActionOutcome {
   method?: 'dom';
 }
 
-interface ObserveOptions { mode?: 'state' | 'screenshot' | 'both'; since?: string; viewport?: boolean; ref?: string; annotate?: boolean; fullPage?: boolean }
+interface ObserveOptions {
+  mode?: 'state' | 'screenshot' | 'both'; format?: 'aria' | 'dom'; frame?: FrameStep | FrameStep[]; since?: string; viewport?: boolean; ref?: string; start?: number;
+  limit?: number; includeFrames?: boolean; annotate?: boolean;
+  fullPage?: boolean;
+}
 
-interface ReadOptions { maxChars?: number; start?: number; readId?: string }
+interface ReadOptions { maxChars?: number; start?: number; readId?: string; frame?: FrameStep | FrameStep[] }
 
 interface ImageValue { __image: true; mimeType: string; base64: string }
 
@@ -171,6 +176,24 @@ interface DownloadWaitResult {
   error?: string;
   elapsedMs: number;
 }
+
+interface ObservedContent { state?: string; dom?: DomSnapshot; warnings?: string[]; diff?: boolean; changed?: { added: number; removed: number; changed?: number } }
+
+interface ObservedFrame extends ObservedContent { frame: FrameStep[]; owner: FrameOwner; unavailable?: string }
+
+interface ObserveResult extends ObservedContent {
+  url: string | null; title: string | null; snapshotId?: string; image?: ImageValue; frames?: ObservedFrame[]; framesComplete?: boolean;
+}
+
+interface ReadElementOptions { target: Target }
+
+interface DomEntry { ref: string; tag: string; text: string; attrs: Record<string, string>; truncated: boolean }
+
+interface DomSnapshot { entries: DomEntry[]; total: number; start: number; nextStart?: number; scope: 'viewport' | 'document' }
+
+interface FrameOwner { ref: string; id: string; name: string; src: string }
+
+interface ElementDetails { ref: string; tag: string; name: string; text: string; attrs: Record<string, string> }
 
 interface ToolDefinition {
   site: string;

@@ -1,3 +1,5 @@
+import { routeFrames } from './frames';
+import { frameSteps } from '../../src/shared/engine';
 /**
  * opencli-mcp extension service worker — the browser runtime.
  * Connects to the Chrome-spawned host over Native Messaging, owns chrome.debugger sessions,
@@ -11,7 +13,7 @@ import { executeWithJournal } from './journal';
 import { NativeHost } from './native';
 import { SessionManager, SessionError, type Session } from './sessions';
 import { performAct, ActError } from './act';
-import { evaluateInEngine, evaluateMain, registerFrameTracking, forgetTab as forgetEngineTab } from './world';
+import { evaluateInWorld, evaluateMain, registerFrameTracking, forgetTab as forgetEngineTab } from './world';
 
 const CDP_ALLOWLIST = new Set([
   'Accessibility.enable', 'Accessibility.getFullAXTree', 'Accessibility.getPartialAXTree',
@@ -164,7 +166,10 @@ async function handleExec(cmd: Command, s: Session): Promise<Result> {
   const tabId = await sessions.resolveTab(s, cmd.page);
   await ensureLoaded(tabId);
   const aggressive = s.surface === 'browser';
-  if (cmd.world === 'engine') return pageScoped(cmd.id, tabId, await evaluateInEngine(tabId, cmd.code, aggressive, commandTimeoutMs(cmd)));
+  if (cmd.world === 'engine') {
+    const route = await routeFrames(tabId, frameSteps(cmd.frame), aggressive);
+    return pageScoped(cmd.id, tabId, await evaluateInWorld(tabId, route?.frameId ?? null, cmd.code, aggressive, commandTimeoutMs(cmd)));
+  }
   if (cmd.frameIndex != null) {
     const frames = await executor.listFrames(tabId);
     const f = frames[cmd.frameIndex];

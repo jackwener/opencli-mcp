@@ -48,7 +48,7 @@ function memberLines(type, indent, depth) {
 }
 const sections = [];
 const wanted = new Map([['AgentApi', 'interface'], ['Browser', 'class'], ['Tab', 'class']]);
-const aliases = ['Target', 'ActAction', 'ActOptions', 'ActionOutcome', 'ObserveOptions', 'ReadOptions', 'ImageValue', 'Box', 'FindEntry', 'FindResult', 'QueryFindResult', 'ElementAtResult', 'ReadTextResult', 'Expectation', 'CheckResult', 'FrameStep', 'DialogInfo', 'ConsoleEntry', 'UserTabInfo', 'CloseUserTabsResult', 'DownloadWaitResult', 'ToolDefinition', 'DraftExpectation', 'Arg', 'ArgValue', 'CommandRunResult', 'CommandRunError', 'DiscoverResult', 'EndpointCandidate', 'UrlMatch'];
+const aliases = ['Target', 'ActAction', 'ActOptions', 'ActionOutcome', 'ObserveOptions', 'ObserveResult', 'ObservedContent', 'ObservedFrame', 'DomSnapshot', 'DomEntry', 'FrameOwner', 'ElementDetails', 'ReadElementOptions', 'ReadOptions', 'ImageValue', 'Box', 'FindEntry', 'FindResult', 'QueryFindResult', 'ElementAtResult', 'ReadTextResult', 'Expectation', 'CheckResult', 'FrameStep', 'DialogInfo', 'ConsoleEntry', 'UserTabInfo', 'CloseUserTabsResult', 'DownloadWaitResult', 'ToolDefinition', 'DraftExpectation', 'Arg', 'ArgValue', 'CommandRunResult', 'CommandRunError', 'DiscoverResult', 'EndpointCandidate', 'UrlMatch'];
 for (const entry of entries) { sf = program.getSourceFile(entry); ts.forEachChild(sf, (node) => {
   if ((ts.isClassDeclaration(node) || ts.isInterfaceDeclaration(node)) && node.name && wanted.has(node.name.text) && !entry.endsWith('adapter-sdk/index.d.ts')) {
     const sym = checker.getSymbolAtLocation(node.name);

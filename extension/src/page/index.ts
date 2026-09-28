@@ -5,10 +5,10 @@
  * file is type-checked with the extension and exercised by the browser smoke test.
  */
 import {
-  ACT_MARK, FRAME_MARK, ENGINE_GLOBAL, PAGE_GLOBAL,
+  ACT_MARK, ENGINE_GLOBAL, PAGE_GLOBAL,
   type ResolveArgs, type ResolveOutcome, type ResolveFail, type Candidate, type FindArgs, type FindResult, type FindEntry, type QueryFindResult, type UploadTarget,
   type AriaArgs, type PointInfo, type FrameProbeResult, type SettleArgs, type SelectResult, type ElementAtResult, type Box, type Expectation, type CheckResult,
-  type ReadTextArgs, type ReadTextResult, type DomClickArgs, type DomClickResult,
+  type ReadTextArgs, type ReadTextResult, type DomClickArgs, type DomClickResult, type DomSnapshot, type ObserveFrameArgs, type FrameObservation, type ElementDetails,
 } from '../../../src/shared/page-contract.js';
 import { collapseAria, subtreeByRef } from '../../../src/shared/aria-collapse.js';
 export { collapseAria, subtreeByRef };
@@ -23,10 +23,26 @@ function injected(): Injected {
 }
 
 function query(selector: string, root: Node = document): Element[] {
-  const rm = /^aria-ref=(e\d+)$/.exec(selector);
-  if (rm) { const el = refToEl.get(rm[1]); return el && el.isConnected ? [el] : []; }
   const i = injected();
-  return i.querySelectorAll(i.parseSelector(selector), root) as Element[];
+  const run = (parsed: any, scope: Node): Element[] => {
+    const at = parsed.parts.findIndex((part: any) => part.name === 'aria-ref');
+    if (at < 0) return i.querySelectorAll(parsed, scope) as Element[];
+    const el = refToEl.get(parsed.parts[at].body);
+    if (!el?.isConnected) return [];
+    const scopes: Node[] = at ? run({ ...parsed, parts: parsed.parts.slice(0, at) }, scope) : [scope];
+    const inside = scopes.some(parent => {
+      let node: Node = el;
+      for (;;) {
+        if (parent === node || parent.contains(node)) return true;
+        const host = (node.getRootNode() as ShadowRoot).host;
+        if (!host) return false;
+        node = host;
+      }
+    });
+    if (!inside) return [];
+    return at + 1 === parsed.parts.length ? [el] : run({ ...parsed, parts: parsed.parts.slice(at + 1) }, el);
+  };
+  return run(i.parseSelector(selector), root);
 }
 
 /** Playwright's elementState throws for states that do not apply (e.g. 'checked' on a text input): read that as "not in this state". */
@@ -45,7 +61,7 @@ function roleOf(el: Element): string {
   try { const u = injected().utils; return (u?.getAriaRole && u.getAriaRole(el)) || el.getAttribute('role') || ''; } catch { return el.getAttribute('role') || ''; }
 }
 function nameOf(el: Element): string {
-  try { const u = injected().utils; return u?.getElementAccessibleNameText ? String(u.getElementAccessibleNameText(el, false) || '') : ''; } catch { return ''; }
+  try { const u = injected().utils; return u?.getElementAccessibleName ? String(u.getElementAccessibleName(el, false) || '') : u?.getElementAccessibleNameText ? String(u.getElementAccessibleNameText(el, false) || '') : ''; } catch { return ''; }
 }
 
 // ── aria refs: a stable identity per element, kept across snapshots ──
@@ -224,18 +240,20 @@ export function settle(args: SettleArgs): Promise<{ waitedMs: number; quiet: boo
 }
 
 // ── frames ──
-export function frameProbe(args: { step: string | number }): FrameProbeResult {
-  document.querySelectorAll(`[${FRAME_MARK}]`).forEach((n) => n.removeAttribute(FRAME_MARK));
+let probedFrame: Element | null = null;
+export function frameElement(): Element | null { return probedFrame?.isConnected ? probedFrame : null; }
+export function frameProbe(args: { step: string | number; scroll?: boolean }): FrameProbeResult {
+  probedFrame = null;
   const list = typeof args.step === 'number' ? [...document.querySelectorAll('iframe,frame')] : query(args.step);
   const fe = (typeof args.step === 'number' ? list[args.step] : list[0]) as HTMLIFrameElement | undefined;
-  if (!fe) return { found: false };
+  if (!fe || !/^(IFRAME|FRAME)$/.test(fe.tagName)) return { found: false };
+  probedFrame = fe;
   let sameOrigin = false; try { sameOrigin = Boolean(fe.contentWindow && fe.contentWindow.document); } catch { sameOrigin = false; }
-  try { fe.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'instant' as ScrollBehavior }); } catch { /* not scrollable */ }
-  fe.setAttribute(FRAME_MARK, '1');
+  if (args.scroll) try { fe.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'instant' as ScrollBehavior }); } catch { /* not scrollable */ }
   const r = fe.getBoundingClientRect();
   return { found: true, sameOrigin, x: r.left + fe.clientLeft, y: r.top + fe.clientTop, src: fe.src || '' };
 }
-export function clearFrameMark(): void { document.querySelectorAll(`[${FRAME_MARK}]`).forEach((n) => n.removeAttribute(FRAME_MARK)); }
+export function clearFrameProbe(): void { probedFrame = null; }
 
 // ── click delivery: a real mouse event must hit the page; DOM click is an explicit other call ──
 let probeHits = 0;
@@ -314,7 +332,7 @@ function pickPort(): ScrollPort {
   let best = doc;
   let bestRange = doc.read().scrollHeight - doc.read().height;
   if (!document.body) return doc;
-  for (const el of document.body.querySelectorAll('*')) {
+  for (const el of query('css=*', document.body)) {
     let oy = '';
     try { oy = getComputedStyle(el).overflowY; } catch { oy = ''; }
     if (oy !== 'auto' && oy !== 'scroll' && oy !== 'overlay') continue;
@@ -340,7 +358,7 @@ function skipRead(el: Element | null, visible: WeakMap<Element, boolean>): boole
       visible.set(el, shown);
       if (!shown) return true;
     }
-    el = el.parentElement;
+    el = el.parentElement ?? (el.getRootNode() as ShadowRoot).host ?? null;
   }
   return false;
 }
@@ -348,15 +366,21 @@ function pageLines(): Array<{ node: Node; text: string }> {
   const out: Array<{ node: Node; text: string }> = [];
   if (!document.body) return out;
   const visible = new WeakMap<Element, boolean>();
-  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
-  let n: Node | null = walker.nextNode();
-  while (n) {
-    if (!skipRead(n.parentElement, visible)) {
-      const t = (n.textContent || '').replace(/\s+/g, ' ').trim();
-      if (t) out.push({ node: n, text: t });
+  const visit = (root: Node) => {
+    for (const n of root.childNodes) {
+      if (n.nodeType === Node.TEXT_NODE) {
+        const parent = n.parentElement ?? (n.getRootNode() as ShadowRoot).host;
+        if (!skipRead(parent, visible)) {
+          const t = (n.textContent || '').replace(/\s+/g, ' ').trim();
+          if (t) out.push({ node: n, text: t });
+        }
+      } else if (n instanceof Element && !skipRead(n, visible)) {
+        visit(n);
+        if (n.shadowRoot) visit(n.shadowRoot);
+      }
     }
-    n = walker.nextNode();
-  }
+  };
+  visit(document.body);
   return out;
 }
 
@@ -456,16 +480,10 @@ function intersectsViewport(el: Element): boolean {
   for (const r of el.getClientRects()) if (r.width > 0 && r.height > 0 && r.right > 0 && r.bottom > 0 && r.left < vw && r.top < vh) return true;
   return false;
 }
-const REF_LINE = /^(\s*)-\s.*\[ref=(e\d+|f\d+e\d+)\](:.*)?$/;
-/** Trim noise from a snapshot line: long URLs (google redirect chains etc.) and very long quoted text. */
-function capLine(s: string): string {
-  return s
-    .replace(/(https?:\/\/[^\s"')\]]+)/g, (u) => (u.length > 72 ? u.slice(0, 69) + '…' : u))
-    .replace(/"([^"]{200,})"/g, (_m, t: string) => '"' + t.slice(0, 197) + '…"');
-}
+const REF_LINE = /^(\s*)-\s.*\[ref=(e\d+|f\d+e\d+)\](?: \[[^\]\r\n]+\])*(:.*)?$/;
 export function aria(args: AriaArgs = {}): string {
   const i = injected();
-  const raw: string = i.ariaSnapshot(document.body, { mode: 'ai' });
+  const raw: string = i.ariaSnapshot(document.body || document.documentElement, { mode: 'ai' });
   resetRefsIfEngineChanged();
   const snap = lastSnapshot();
   const info = snap?.info;
@@ -506,7 +524,7 @@ export function aria(args: AriaArgs = {}): string {
   // the plugin always ends its state with the focused element; ours names the focused ref so the next action can target it
   const active = document.activeElement;
   const focusRef = active && active !== document.body ? ariaRefOf(active) : null;
-  let text = out.map(capLine).join('\n') + (focusRef ? `\nFocused: [ref=${focusRef}]` : '');
+  let text = out.join('\n') + (focusRef ? `\nFocused: [ref=${focusRef}]` : '');
   if (args.ref) {
     const sub = subtreeByRef(text, args.ref);
     if (sub == null) return `No node [ref=${args.ref}] in this snapshot. Observe again without ref.`;
@@ -516,11 +534,75 @@ export function aria(args: AriaArgs = {}): string {
   return typeof args.budget === 'number' ? collapseAria(text, args.budget).text : text;
 }
 
-const describe = (el: Element, i: number): FindEntry => {
+/** Read live properties, not initial HTML value/checked attributes. */
+function domAttributes(el: Element): Record<string, string> {
   const attrs: Record<string, string> = {};
-  for (const a of ['id', 'name', 'type', 'placeholder', 'aria-label', 'title', 'href', 'data-testid', 'value']) {
-    const v = el.getAttribute(a); if (v) attrs[a] = a === 'value' && isCredentialField(el) ? '<redacted>' : v.slice(0, 200);
+  for (const key of ['id', 'name', 'type', 'role', 'aria-label', 'aria-labelledby', 'aria-describedby', 'aria-expanded', 'aria-selected', 'aria-checked', 'aria-disabled', 'placeholder', 'title', 'href', 'src', 'contenteditable', 'tabindex', 'data-testid']) {
+    const value = el.getAttribute(key); if (value !== null) attrs[key] = value;
   }
+  if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement) {
+    attrs.value = isCredentialField(el) ? '<redacted>' : el.value;
+    attrs.disabled = String(el.disabled);
+    attrs.required = String(el.required);
+  }
+  if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) attrs.readonly = String(el.readOnly);
+  if (el instanceof HTMLInputElement && ['checkbox', 'radio'].includes(el.type)) { attrs.checked = String(el.checked); attrs.indeterminate = String(el.indeterminate); }
+  if (el instanceof HTMLOptionElement) attrs.selected = String(el.selected);
+  if (el instanceof HTMLSelectElement || el instanceof HTMLInputElement && el.type === 'file') attrs.multiple = String(el.multiple);
+  return attrs;
+}
+
+const INTERACTIVE_ROLES = new Set(['button', 'link', 'textbox', 'checkbox', 'radio', 'combobox', 'listbox', 'option', 'menuitem', 'menuitemcheckbox', 'menuitemradio', 'slider', 'spinbutton', 'switch', 'tab', 'treeitem', 'searchbox']);
+function isControl(el: Element): boolean {
+  return /^(A|BUTTON|INPUT|SELECT|TEXTAREA|DETAILS|SUMMARY|OPTION)$/.test(el.tagName)
+    || el.hasAttribute('onclick') || el.hasAttribute('href') || (el as HTMLElement).isContentEditable
+    || (el.hasAttribute('tabindex') && Number(el.getAttribute('tabindex')) >= 0)
+    || INTERACTIVE_ROLES.has(el.getAttribute('role') ?? '');
+}
+
+/** Independent DOM evidence, including open shadow roots; shares stable refs with ARIA and actions. */
+export function visibleDom(args: ObserveFrameArgs = {}): DomSnapshot {
+  const root = args.ref ? query(`aria-ref=${args.ref}`)[0] : document;
+  if (!root) throw new Error(`stale_ref: ${args.ref}; observe again without ref`);
+  const elements = [...(root instanceof Element ? [root] : []), ...query('css=*', root)]
+    .filter(el => isControl(el) && is(el, 'visible') && (args.viewport === false || intersectsViewport(el)));
+  const start = Math.max(0, Math.floor(args.start ?? 0));
+  const limit = Math.max(1, Math.min(200, Math.floor(args.limit ?? 60)));
+  const entries = elements.slice(start, start + limit).map(el => {
+    let truncated = false;
+    const clip = (value: string, max: number) => { if (value.length <= max) return value; truncated = true; return value.slice(0, max) + '…'; };
+    return { ref: ariaRefOf(el)!, tag: el.tagName.toLowerCase(), text: clip(isCredentialField(el) ? '<redacted>' : text(el), 160), attrs: Object.fromEntries(Object.entries(domAttributes(el)).map(([k, v]) => [k, clip(v, 300)])), truncated };
+  });
+  const nextStart = start + entries.length < elements.length ? start + entries.length : undefined;
+  return { entries, total: elements.length, start, ...(nextStart !== undefined && { nextStart }), scope: args.viewport === false ? 'document' : 'viewport' };
+}
+
+/** Capture one document and describe its frame owners without entering or scrolling them. */
+export function observeFrame(args: ObserveFrameArgs = {}): FrameObservation {
+  const content = args.format === 'dom' ? { dom: visibleDom(args) } : { state: aria(args) };
+  const root = args.ref ? query(`aria-ref=${args.ref}`)[0] : document;
+  const children = root ? [...(root instanceof Element && /^(IFRAME|FRAME)$/.test(root.tagName) ? [root] : []), ...query('css=iframe,frame', root)]
+    .filter(el => el.getAttribute('aria-hidden') !== 'true' && is(el, 'visible') && (!args.viewport || intersectsViewport(el)))
+    .map(el => ({ ref: ariaRefOf(el)!, id: el.id, name: el.getAttribute('name') ?? '', src: el.getAttribute('src') ?? '' })) : [];
+  return { ...content, children };
+}
+
+/** Exact evidence for a single target, with the same strict resolution as actions and no scrolling. */
+export function readElement(args: FindArgs): ElementDetails | ResolveFail {
+  let matches = query(args.selector);
+  if (!matches.length && args.fallback) matches = query(args.fallback);
+  if (!matches.length) return { error: { code: 'not_found', message: `no element matches ${args.selector}`, hint: 'Observe or find the target again.' } };
+  if (matches.length > 1) {
+    const visible = matches.filter(el => is(el, 'visible'));
+    if (visible.length !== 1) return { error: { code: 'selector_ambiguous', message: `${matches.length} elements match ${args.selector}`, hint: 'Use a ref from observe/find, or a more specific locator.' } };
+    matches = visible;
+  }
+  const el = matches[0];
+  return { ref: ariaRefOf(el)!, tag: el.tagName.toLowerCase(), name: nameOf(el), text: isCredentialField(el) ? '<redacted>' : (el as HTMLElement).innerText ?? el.textContent ?? '', attrs: domAttributes(el) };
+}
+
+const describe = (el: Element, i: number): FindEntry => {
+  const attrs = Object.fromEntries(Object.entries(domAttributes(el)).map(([key, value]) => [key, value.slice(0, 200)]));
   return { nth: i, ref: ariaRefOf(el), selector: replaySelector(el), tag: el.tagName.toLowerCase(), role: roleOf(el), name: nameOf(el).slice(0, 120), text: text(el).slice(0, 120), attrs, visible: is(el, 'visible'), enabled: stateOf(el, 'enabled').received.startsWith('error:') ? null : is(el, 'enabled'), editable: stateOf(el, 'editable').received.startsWith('error:') ? null : is(el, 'editable'), box: box(el) };
 };
 
@@ -533,32 +615,27 @@ export function find(args: FindArgs): FindResult {
   return { matches_n: matches.length, visible_n, selector: usedSelector, entries: matches.slice(0, Math.max(1, Math.min(args.limit, 100))).map(describe) };
 }
 
-/** Search the current action map without requiring the caller to know a locator first. */
+/** Search DOM evidence independently of ARIA, including attributes, live values and open shadow roots. */
 export function findByQuery(args: { query: string; limit: number }): QueryFindResult {
   const q = args.query.trim().toLowerCase();
   if (!q) return { matches_n: 0, entries: [] };
-  const stack: Array<{ indent: number; line: string; ref: string | null }> = [];
   const entries: QueryFindResult['entries'] = [];
-  const seen = new Set<string>();
   let matches = 0;
-  for (const line of aria().split('\n')) {
-    if (!line.trimStart().startsWith('- ')) continue;
-    const indent = line.length - line.trimStart().length;
-    while (stack.length && stack[stack.length - 1].indent >= indent) stack.pop();
-    const ref = /\[ref=(e\d+)\]/.exec(line)?.[1] ?? null;
-    const candidateRef = ref ?? [...stack].reverse().find((item) => item.ref)?.ref ?? null;
-    if (line.toLowerCase().includes(q) && candidateRef && !seen.has(candidateRef)) {
-      const el = refToEl.get(candidateRef);
-      if (el?.isConnected) {
-        seen.add(candidateRef);
-        matches++;
-        if (entries.length < Math.max(1, Math.min(args.limit, 50))) {
-          const interactive = [...stack].reverse().find((item) => item.ref && /\b(button|link|textbox|checkbox|radio|combobox|menuitem|file-input)\b/.test(item.line));
-          entries.push({ ...describe(el, matches - 1), path: stack.slice(-4).map((item) => item.line.trim().slice(0, 120)), interactiveAncestorRef: /\b(button|link|textbox|checkbox|radio|combobox|menuitem|file-input)\b/.test(line) ? candidateRef : interactive?.ref ?? null });
-        }
-      }
+  for (const el of query('css=*')) {
+    if (/^(SCRIPT|STYLE|NOSCRIPT|TEMPLATE)$/.test(el.tagName) || !is(el, 'visible')) continue;
+    const ownText = [...el.childNodes].filter(n => n.nodeType === Node.TEXT_NODE).map(n => n.textContent ?? '').join(' ');
+    const evidence = [ownText, ...(isControl(el) ? [text(el), nameOf(el)] : []), ...Object.values(domAttributes(el))].join(' ').toLowerCase();
+    if (!evidence.includes(q)) continue;
+    matches++;
+    if (entries.length >= Math.max(1, Math.min(args.limit, 50))) continue;
+    const ancestors: Element[] = [];
+    let node: Element | null = el;
+    while (node && ancestors.length < 8) {
+      ancestors.push(node);
+      node = node.parentElement ?? ((node.getRootNode() as ShadowRoot).host || null);
     }
-    stack.push({ indent, line, ref });
+    const interactive = ancestors.find(isControl);
+    entries.push({ ...describe(el, matches - 1), path: ancestors.slice(1, 5).reverse().map(n => `${n.tagName.toLowerCase()}${n.id ? '#' + n.id : ''}`), interactiveAncestorRef: interactive ? ariaRefOf(interactive) : null });
   }
   return { matches_n: matches, entries };
 }
@@ -616,7 +693,7 @@ export function check(args: Expectation): CheckResult {
   return { ok: failed.length === 0, failed, url: location.href, title: document.title };
 }
 
-export const api = { check, resolve, resolveUpload, fileSelectionCount, pointInfo, focus, readValue, fill, nativeSet, isChecked, select, caretToEnd, clearActMark, settle, frameProbe, clearFrameMark, aria, find, findByQuery, elementAt, annotate, unannotate, armClickProbe, readClickProbe, domClick, readText };
+export const api = { check, resolve, resolveUpload, fileSelectionCount, pointInfo, focus, readValue, fill, nativeSet, isChecked, select, caretToEnd, clearActMark, settle, frameProbe, frameElement, clearFrameProbe, aria, observeFrame, visibleDom, readElement, find, findByQuery, elementAt, annotate, unannotate, armClickProbe, readClickProbe, domClick, readText };
 export type PageApi = typeof api;
 
 (globalThis as any)[PAGE_GLOBAL] = api;
