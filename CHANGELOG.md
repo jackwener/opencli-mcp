@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.27 — 2026-09-30
+
+- feat: add Gmail API write adapters
+
 ## 0.0.26 — 2026-09-30
 
 - Unify element refs across ARIA, DOM, find and actions, with document/frame-scoped identity and actionable stale-ref errors.
