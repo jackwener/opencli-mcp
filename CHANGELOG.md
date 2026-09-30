@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.0.26 — 2026-09-30
+
+- Unify element refs across ARIA, DOM, find and actions, with document/frame-scoped identity and actionable stale-ref errors.
+- Resolve ARIA refs through the producing engine; prevent unregistered refs and large-capture eviction, and correctly handle quoted snapshot names.
+- Clarify persistent REPL output directly in MCP guidance and diagnostics; preserve standard JavaScript semantics and bindings.
+- Keep native host and MCP launchers working across Node upgrades, with installation and startup diagnostics.
+- Read X search from observed UI evidence and improve Windows browser-connection recovery guidance.
+- Ship Chrome extension 0.0.19; update the extension to receive the browser-side ref fixes.
+
 ## 0.0.25 — 2026-09-28
 
 - Fix JavaScript execution on Node 26 while retaining Node 22+ support, using one V8 Inspector REPL implementation across Node 22, 24 and 26.
