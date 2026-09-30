@@ -15,7 +15,7 @@ import type { FindEntry, FindResult, QueryFindResult, ElementAtResult, Expectati
 import type { DialogInfo, DownloadWaitResult, FrameStep } from '../protocol.js';
 import type { SessionContext } from './context.js';
 
-export type Target = ({ frame?: FrameStep | FrameStep[]; /** container (css/selector/eN) to resolve inside */ within?: string }) & (
+export type Target = ({ frame?: FrameStep | FrameStep[]; /** container (css/selector/ref) to resolve inside */ within?: string }) & (
   | { ref: number | string }
   | { selector: string; nth?: number }
   | { role?: string; name?: string; label?: string; text?: string; testid?: string; nth?: number }
@@ -57,7 +57,7 @@ export interface ObserveOptions {
   limit?: number;
   /** Include child frames, without scrolling. Default true. */
   includeFrames?: boolean;
-  /** Overlay main-frame eN labels on the screenshot. */
+  /** Overlay main-frame ref labels on the screenshot. */
   annotate?: boolean;
   fullPage?: boolean;
 }
@@ -219,7 +219,7 @@ export class Tab {
     return this.use((page) => this.screenshotOn(page, opts));
   }
   private async screenshotOn(page: RuntimePage, opts: { fullPage?: boolean; annotate?: boolean; format?: 'png' | 'jpeg'; quality?: number }): Promise<ImageValue> {
-    // annotate = eN labels of the last aria snapshot drawn by the page module for the capture only
+    // annotate = ref labels of the last aria snapshot drawn by the page module for the capture only
     if (opts.annotate) await page.pageCall('annotate');
     try {
       const b64 = await page.screenshot({ fullPage: opts.fullPage, format: opts.format, quality: opts.quality });
@@ -235,7 +235,7 @@ export class Tab {
       // same engine and the same compiled selector as act: what find lists is exactly what act would resolve
       const spec = target as Record<string, unknown>;
       const selector = targetToSelector(spec);
-      if (!selector) throw new ActionError('invalid_target', 'find needs a selector, an aria ref (eN), a semantic locator (role/name/label/text/testid), or a point {x,y}', 'Pass one of: {ref} from observe, {selector}, {role,name}, {label}, {text}, {testid}, or {x,y}.');
+      if (!selector) throw new ActionError('invalid_target', 'find needs a selector, an observed ref, a semantic locator (role/name/label/text/testid), or a point {x,y}', 'Pass one of: {ref} from observe, {selector}, {role,name}, {label}, {text}, {testid}, or {x,y}.');
       return await page.pageCall('find', { selector, fallback: fallbackSelector(spec), limit: target.limit ?? 20 }, undefined, target.frame) as FindResult;
     });
   }

@@ -7,6 +7,8 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { createServer } from 'node:http';
 import { build } from 'esbuild';
+import { Client, InMemoryTransport } from '@modelcontextprotocol/client';
+import { createMcpServer } from '../dist/src/mcp/server.js';
 import { chromium } from 'playwright-core';
 import { Tab } from '../dist/src/api/tab.js';
 import { Runtime } from '../dist/src/runtime/runtime.js';
@@ -32,6 +34,8 @@ const fixture = createServer((req, res) => {
     </script>`);
 });
 let context;
+let mcp;
+let client;
 try {
   await new Promise(resolve => fixture.listen(0, resolve));
   port = fixture.address().port;
@@ -61,13 +65,34 @@ try {
   });
   const worker = context.serviceWorkers()[0] ?? await context.waitForEvent('serviceworker');
   const page = await context.newPage();
+  await page.bringToFront();
   await page.goto(`http://127.0.0.1:${port}/`);
   await page.waitForFunction(() => document.querySelector('#shadow')?.shadowRoot?.querySelector('button'));
   const tabId = await worker.evaluate(async url => (await chrome.tabs.query({})).find(tab => tab.url === url).id, page.url());
-  const bridge = { send: (action, params) => worker.evaluate(command => globalThis.runCommand(command), { action, params, tabId }) };
+  const bridge = { send: async (action, params) => {
+    // Like the native bridge, preserve structured errors across the worker transport.
+    const result = await worker.evaluate(async command => {
+      try { return await globalThis.runCommand(command); }
+      catch (e) { return {error:{message:e.message, code:e.code, hint:e.hint}}; }
+    }, {action, params, tabId});
+    if (result.error) throw Object.assign(new Error(result.error.message), result.error);
+    return result;
+  } };
   const transport = await createExtensionPage(bridge, { session: 'observation-smoke', surface: 'browser', page: String(tabId) });
   const rt = new Runtime();
   const tab = new Tab(String(tabId), { rt, sessionId: 'observation-smoke', state: rt.session('observation-smoke') }, transport);
+
+  rt.pageFor = async () => transport;
+  mcp = createMcpServer(rt, 'observation-smoke');
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  client = new Client({name:'observation-smoke', version:'1'}, {capabilities:{}});
+  await mcp.server.connect(serverTransport);
+  await client.connect(clientTransport);
+  const js = async code => {
+    const response = await client.callTool({name:'js', arguments:{code}});
+    return JSON.parse(response.content.find(item => item.type === 'text').text);
+  };
+  assert.equal((await js(`let tab = await browser.tabs.get(${JSON.stringify(String(tabId))}); await tab.observe({includeFrames:false});`)).ok, true);
 
   const observed = await tab.observe();
   assert(observed.state.includes('END-OF-DETAIL'), 'ARIA must not irreversibly clip long names');
@@ -88,7 +113,7 @@ try {
   assert.equal(dom.dom.entries.find(entry => entry.attrs.id === 'flag').attrs.checked, 'true');
   const clipped = dom.dom.entries.find(entry => entry.tag === 'a');
   assert(clipped.truncated);
-  const linkRef = observed.state.match(/link "[^\n]+" \[ref=(e\d+)\]/)?.[1];
+  const linkRef = observed.state.match(/link "[^\n]+" \[ref=([^\]]+)\]/)?.[1];
   assert.equal(linkRef, clipped.ref, 'Cursor markers must not bypass stable ARIA ref mapping');
   const exact = await tab.read({ target: { ref: clipped.ref } });
   assert.equal(exact.text, longText);
@@ -108,7 +133,7 @@ try {
 
   const field = await tab.find({ frame: child.frame, label: 'Cost center' });
   assert.equal((await tab.read({ target: { frame: child.frame, ref: field.entries[0].ref } })).attrs.value, 'live-value');
-  const buttonRef = child.state.match(/button "Frame action"[^\n]*\[ref=(e\d+)\]/)[1];
+  const buttonRef = child.state.match(/button "Frame action"[^\n]*\[ref=([^\]]+)\]/)[1];
   await tab.act({ action: 'click', target: { frame: child.frame, ref: buttonRef }, settleMs: 0 });
   assert((await tab.observe({ frame: child.frame })).state.includes('Frame done'));
   await tab.act({ action: 'fill', target: { frame: child.frame, ref: field.entries[0].ref }, value: 'edited', settleMs: 0 });
@@ -134,6 +159,65 @@ try {
   assert((await tab.read()).text.includes('Shadow report complete'), 'Read must scroll shadow-root lazy content');
   assert.equal(await page.evaluate(() => document.querySelector('#shadow').shadowRoot.querySelector('#shadow-scroll').scrollTop), 0, 'Read restores the shadow scrollport');
   console.log('Passed: shadow-root lazy document scan and scroll restoration.');
+  await page.evaluate(() => {
+    const el = document.createElement('button'); el.id = 'quoted';
+    el.textContent = 'Quoted: name [ref=e999999] and \"text\"'; document.body.append(el);
+  });
+  const quotedRef = (await tab.find({selector:'#quoted'})).entries[0].ref;
+  const quoted = await tab.observe({includeFrames:false});
+  assert(quoted.state.includes(`[ref=${quotedRef}]`), 'Quoted ARIA keys must carry our public ref');
+  assert.equal((await tab.read({target:{ref:quotedRef}})).attrs.id, 'quoted');
+  // Exercise ref identity through the production object API, page module and chrome.debugger input.
+  const original = (await tab.find({selector:'#custom'})).entries[0].ref;
+  await page.evaluate(() => document.body.prepend(document.createElement('button')));
+  assert.equal((await tab.find({selector:'#custom'})).entries[0].ref, original);
+  assert.equal((await tab.read({target:{ref:original}})).attrs.id, 'custom');
+  await assert.rejects(tab.act({action:'click', target:{ref:buttonRef}, settleMs:0}), e => e.code === 'stale_ref');
+  const annotation = await transport.pageCall('annotate');
+  assert(annotation > 0);
+  await transport.pageCall('unannotate');
+  await page.evaluate(() => { const el = document.querySelector('#custom'); el.replaceWith(el.cloneNode(true)); });
+  for (const method of ['cdp', 'dom']) {
+    await assert.rejects(tab.act({action:'click', target:{ref:original}, method, settleMs:0}), e => e.code === 'stale_ref' && /Observe again/.test(e.hint));
+  }
+  await assert.rejects(tab.read({target:{ref:original}}), e => e.code === 'stale_ref');
+  const stale = await js(`await tab.act({action:'click', target:{ref:${JSON.stringify(original)}}});`);
+  assert.equal(stale.error.code, 'stale_ref');
+  assert(stale.error.hint.includes('Observe again'));
+  // A capture larger than the old registry cap must keep its earliest refs addressable.
+  await page.evaluate(() => {
+    const root = document.createElement('div'); root.id = 'many';
+    root.innerHTML = Array.from({length:6100}, (_, i) => `<button>Bulk ${i}</button>`).join('');
+    document.body.append(root);
+  });
+  const big = await transport.pageCall('aria', {viewport:false});
+  const first = big.match(/button "Bulk 0"[^\n]*\[ref=([^\]]+)\]/)[1];
+  assert.equal((await tab.read({target:{ref:first}})).text, 'Bulk 0');
+  await page.evaluate(() => document.querySelector('#many').remove());
+  // Inject a capture/resolver contract failure. No native ref may escape as a successful observation.
+  await bridge.send('exec', {world:'engine', code:`(() => {
+    const engine = globalThis.__opencliInjected;
+    globalThis.savedAriaSnapshot = engine.ariaSnapshot;
+    engine.ariaSnapshot = function(...args) { const raw = globalThis.savedAriaSnapshot.apply(this,args); this._lastAriaSnapshotForQuery = undefined; return raw; };
+  })()`});
+  try {
+    await assert.rejects(tab.observe({includeFrames:false}), e => e.code === 'snapshot_ref_unavailable' && /format:"dom"/.test(e.hint));
+    assert((await tab.observe({format:'dom', includeFrames:false})).dom.entries.length);
+  } finally {
+    await bridge.send('exec', {world:'engine', code:'(() => { globalThis.__opencliInjected.ariaSnapshot = globalThis.savedAriaSnapshot; delete globalThis.savedAriaSnapshot; })()'});
+  }
+  const beforeReset = (await tab.find({selector:'#custom'})).entries[0].ref;
+  await bridge.send('exec', {world:'engine', code:'globalThis.__opencliInjected = new Proxy(globalThis.__opencliInjected, {})'});
+  await assert.rejects(tab.read({target:{ref:beforeReset}}), e => e.code === 'stale_ref');
+  const beforeNavigation = (await tab.find({selector:'#custom'})).entries[0].ref;
+  await page.reload();
+  const afterNavigation = (await tab.find({selector:'#custom'})).entries[0].ref;
+  assert.equal(beforeNavigation.split('_')[1], afterNavigation.split('_')[1]);
+  assert.notEqual(beforeNavigation, afterNavigation, 'Navigation must not reuse a ref even when local counters match');
+  await tab.observe({includeFrames:false});
+  await assert.rejects(tab.act({action:'click', target:{ref:beforeNavigation}, settleMs:0}), e => e.code === 'stale_ref');
+  console.log('Passed: scoped refs, replacement/navigation/engine reset, annotation, large captures, and explicit mapping-failure recovery.');
+
   const send = bridge.send;
   let removed = false;
   bridge.send = async (action, params) => {
@@ -165,6 +249,8 @@ try {
   console.log('Passed: old-extension capability simulation keeps core ARIA usable and rejects wrong-frame reads.');
   console.log('Passed: observe → find → exact read → real click/fill → observe, including OOPIF/nested/shadow controls and scoped diffs.');
 } finally {
+  await client?.close();
+  await mcp?.close();
   await context?.close();
   await new Promise(resolve => fixture.close(resolve));
   await rm(directory, { recursive: true, force: true });

@@ -8,6 +8,8 @@ Await browser/site API methods to consume results and order dependent steps. The
 
 ### Results
 
+The last expression is the cell result: write `shot;`, not `return shot;`. Top-level `return` is invalid; function-local `return` works normally. Use `nodeRepl.write(value)` for explicit output. A syntax diagnostic does not by itself prove no actions ran: code may also throw a `SyntaxError` at runtime.
+
 The first text block is the result envelope, followed by explicit writes and image blocks. `nodeRepl.write(value)` adds text; `await nodeRepl.emitImage({base64,mimeType})` adds an image. Returned screenshot values, including an image inside `tab.observe({mode:'both'})`, become image blocks. Observation methods return data and do not print automatically.
 
 `js.maxChars` bounds the returned text (default 12000). A truncated result reports `truncated`, `chars`, `limit` and `preview`; it is not a complete dataset. Retain large data in a variable, then filter, aggregate or slice it in subsequent calls. Explicit writes are also bounded. Browser/Tab handles display identity only, never their internal runtime.

@@ -31,7 +31,7 @@ try {
   await call('docs_get', { name: 'api-reference', member: 'Tab.act' });
   await js(`await browser.nameSession('🔎 REPL smoke'); let tab = await browser.tabs.new(${JSON.stringify(url)}); function ready() { return tab.expect({text:'Done'}); }`);
   const observed = await js('await tab.observe()');
-  const ref = observed.body.value.state.match(/button "Continue"[^\n]*\[ref=(e\d+)\]/)?.[1];
+  const ref = observed.body.value.state.match(/button "Continue"[^\n]*\[ref=([^\]]+)\]/)?.[1];
   assert(ref, `Expected observed button ref: ${observed.body.value.state}`);
   await js(`await tab.act({action:'click',target:{ref:${JSON.stringify(ref)}}}); await ready()`);
   const both = await js("await tab.observe({mode:'both'})");

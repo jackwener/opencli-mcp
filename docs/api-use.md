@@ -4,14 +4,14 @@ The core loop and the discipline that makes it reliable. Use `js` and await ever
 
 1. **Loop:** `browser.tabs.new` (or `browser.user.claimTab` a tab the user already has) → `tab.observe` → `tab.act` → `tab.observe`. One
    `tab.act` call does everything (waits for actionable, scrolls, hit-tests, dispatches real input, settles).
-2. **Locators come from the latest observe — never guess one.** Use a `{ref:"eN"}` from the last observe, or a
+2. **Locators come from the latest observe — never guess one.** Use a `{ref:"..."}` from the last observe, or a
    role/name/label/text/testid you can read there. `tab.act` is strict: exactly one visible match acts; several fail
    with `selector_ambiguous` (no `nth`/first shortcut through ambiguity). Scope generic labels (Close, Search, Add to
-   cart, S/M/L) with `within` (a container's selector or its eN ref). After a strict failure, observe or `find` again —
+   cart, S/M/L) with `within` (a container's selector or its observed ref). After a strict failure, observe or `find` again —
    never retry the same target unchanged. `tab.find(target)` (in `js`) runs the same engine; pass an entry's `selector`
    back to act on that exact element. Durability order: `testid` → stable `id`/`data-*` → stable `href` → `role`+`name`
    → `label` → `text` → structural css.
-3. **Refs are per-snapshot.** After navigation or a page change, observe again before reusing a ref.
+3. **Refs identify Elements in one document/frame.** Copy them unchanged. The same living Element keeps its ref across observations; replacement, navigation or engine reset invalidates it. On `stale_ref`, observe again in the intended frame. A ref never automatically resolves to a replacement Element.
 4. **Branch on `error.code`, never message text.** Full families and what to do for each are in the `errors` doc.
 5. **iframes:** add `frame` to the target — `{frame:"#checkout", role:"button", name:"Pay"}`, `frame:0`, or a chain
    outermost-first `frame:["#checkout", 0]` / `"#checkout >> iframe.card"`. Same-origin, data:/srcdoc, and cross-origin
@@ -26,7 +26,7 @@ The core loop and the discipline that makes it reliable. Use `js` and await ever
 10. **Observe discipline:** one observe to orient, then act on its refs. The snapshot is the action map, not the
     document — read an article, doc, or chat log with `tab.read` (linear text, no refs; scroll is restored). If it returns
     `nextStart`, pass it with `readId` as `start` and `readId` to continue that same capture. `reason:"unbounded"` means a growing feed stopped the scan; `scan_limit` means the scan ended before the page did. Branches marked `(collapsed)`
-    keep their ref; `tab.observe` with `{ref:"eN"}` opens that one branch. The snapshot is the full tree unless you pass
+    keep their ref; `tab.observe` with `{ref:"..."}` opens that one branch. The snapshot is the full tree unless you pass
     `since` with the `snapshotId` of a state still in your context for an exact diff; otherwise you get the full state. `viewport: true` is the
     on-screen subtree, not a page of the full tree. `click` is a real mouse event and fails with `not_delivered` when
     the page did not receive it, or the element has no box; only then, once, `method:"dom"`. Don't re-verify a fact an authoritative signal already shows
@@ -45,7 +45,7 @@ The core loop and the discipline that makes it reliable. Use `js` and await ever
 ## Choose an observation, then read precisely
 
 - Older extensions retain basic main-frame ARIA with a warning; DOM and frame-scoped reads require the new extension capability. Host and extension package versions need not match.
-- `tab.observe()` is the ARIA action map, including child-frame observations. Each frame has its own ref space; never use a child's `eN` in the parent frame. `since` uses the returned `snapshotId` and diffs each captured frame independently.
+- `tab.observe()` is the ARIA action map, including child-frame observations. Each frame has its own ref space; never use a child's ref in the parent frame. `since` uses the returned `snapshotId` and diffs each captured frame independently.
 - `tab.observe({format:'dom'})` independently reads visible controls and live attributes, including open shadow roots. It is viewport-scoped by default; `viewport:false` covers rendered controls in the selected document. It does not discover every delegated event handler or unrendered virtual row.
 - DOM `total/start/nextStart` describe a live list per frame. Continue with `observe({format:'dom',frame,start:nextStart})`; page changes can change that list. `truncated:true` on an entry means some preview fields were shortened.
 - `tab.read({target:{ref,frame}})` reads one element's full current text, accessible name, selected attributes and live form state without scrolling. This is the detail path for a clipped DOM preview or long ARIA label. It uses strict locator resolution, just like actions. For document text, `tab.read({frame})` performs the existing bounded scroll-and-read scan; its `readId/start` continuation is tied to that frame.

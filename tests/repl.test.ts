@@ -34,6 +34,20 @@ describe('persistent Node REPL', () => {
     expect((await s.run('await new Promise(resolve => process.stdout.write("module output", resolve))')).writes.join('')).toContain('module output');
   });
 
+  it('explains top-level return without changing persistence or claiming errors roll back effects', async () => {
+    let effects = 0;
+    const s = repl({ effect: () => ++effects });
+    const invalid = await s.run('let shot = await effect(); return shot;');
+    expect(invalid.error).toMatchObject({ name: 'SyntaxError', message: 'Illegal return statement', hint: expect.stringContaining('Replace `return value;` with `value;`') });
+    expect(effects).toBe(0);
+    expect((await s.run('let shot = await effect(); shot;')).value).toBe(1);
+    expect((await s.run('function result() { return shot; } result();')).value).toBe(1);
+    const thrown = await s.run('await effect(); throw new SyntaxError("Illegal return statement")');
+    expect(effects).toBe(2);
+    expect(thrown.error?.hint).not.toMatch(/not executed|no actions|retry|replay/i);
+    expect((await s.run('shot;')).value).toBe(1);
+  });
+
   it('serializes calls and interrupts an infinite loop without blocking the host', async () => {
     const s = repl();
     const first = s.run('let value = await new Promise(r => setTimeout(() => r(1), 30)); value');
@@ -148,7 +162,8 @@ it('runs discovery → observe → act → verify → cleanup through MCP and th
   };
   try {
     expect((await client.listTools()).tools.map(t => t.name).sort()).toEqual(['docs_get', 'doctor', 'js', 'js_reset', 'session_finalize', 'site_run', 'sites_search']);
-    expect((await call('docs_get')).text).toContain('browser.tabs.new');
+    expect((await call('docs_get')).text).toContain('do not use top-level `return`');
+    expect((await client.listTools()).tools.find(t => t.name === 'js')?.description).toContain('do not use top-level return');
     expect((await call('docs_get', { name: 'api-reference', member: 'Tab.act' })).text).toContain('ActionOutcome');
     const observeDoc = (await call('docs_get', { name: 'api-reference', member: 'Tab.observe' })).text;
     expect(observeDoc).toContain('interface ObserveOptions');

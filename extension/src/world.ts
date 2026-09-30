@@ -8,7 +8,7 @@
  */
 import * as executor from './cdp';
 import { INJECTED_SOURCE } from '../../src/shared/injected-source';
-import { ENGINE_GLOBAL, PAGE_GLOBAL, installEngineJs, pageCallJs } from '../../src/shared/engine';
+import { ENGINE_GLOBAL, PAGE_GLOBAL, installEngineJs, pageCallJs, unwrapPageResult } from '../../src/shared/engine';
 
 /** The bundled page module (extension/dist/page.js), read once from the extension package. */
 let pageModule: Promise<string> | null = null;
@@ -155,8 +155,8 @@ export async function evaluateMain(tabId: number, frameId: string | null, expres
 }
 
 /** Call one page-module function (extension/src/page) in the main frame's world or a child frame's world. */
-export function callPage(tabId: number, frameId: string | null, fn: string, args: unknown, aggressive: boolean, timeoutMs?: number): Promise<unknown> {
-  return evaluateInWorld(tabId, frameId, pageCallJs(fn, args), aggressive, timeoutMs);
+export async function callPage(tabId: number, frameId: string | null, fn: string, args: unknown, aggressive: boolean, timeoutMs?: number): Promise<unknown> {
+  return unwrapPageResult(await evaluateInWorld(tabId, frameId, pageCallJs(fn, args), aggressive, timeoutMs));
 }
 
 /** A CDP command on the session that owns the frame: root for the main frame and in-process frames, the OOPIF target otherwise. */

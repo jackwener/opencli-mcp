@@ -4,7 +4,7 @@ import { BrowserCommandError } from '../host/bridge.js';
 import { wrapForEval, waitForDomStableJs, networkRequestsJs } from './browser-helpers.js';
 import type { RuntimePage } from './page-types.js';
 import type { Command, ActSpec, ActResult, DialogInfo, StreamReadOptions, StreamBatch, CloseUserTabsResult, DownloadWaitResult, FrameStep } from '../protocol.js';
-import { pageCallJs, ActError, PAGE_GLOBAL, frameSteps } from '../shared/engine.js';
+import { pageCallJs, unwrapPageResult, ActError, PAGE_GLOBAL, frameSteps } from '../shared/engine.js';
 import type { Expectation, CheckResult } from '../shared/page-contract.js';
 
 export interface ExtensionPageOptions {
@@ -234,7 +234,7 @@ class ExtensionPage implements ExtensionRuntimePage {
       if (typeof page[${JSON.stringify(fn)}] !== 'function') throw new Error('This page API needs an updated extension: ' + ${JSON.stringify(fn)});
       return ${call};
     })()`;
-    return (await this.send('exec', { code, world: 'engine', ...(frame !== undefined && { frame }), ...(timeoutMs && { timeoutMs }) })).data;
+    return unwrapPageResult((await this.send('exec', { code, world: 'engine', ...(frame !== undefined && { frame }), ...(timeoutMs && { timeoutMs }) })).data);
   }
   /** Live URL first; the sticky cache is only the fallback while a navigation is in flight. */
   async getCurrentUrl(): Promise<string | null> {

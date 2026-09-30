@@ -20,7 +20,7 @@ opencli-mcp 是一个连接到真实 Chrome 的 MCP browser service。Chrome ext
 
 以 `js` 为 browser 的主要入口。用 `let tab = await browser.tabs.new(url)` 打开新 tab，或用 `await browser.user.openTabs({query:"…"})` 找到现有 tab，再用 `let tab = await browser.user.claimTab({tabId})` 接管。随后按 **observe → act → verify** 工作：
 
-- `tab.observe` 给出可访问性快照和 `eN` 引用；`tab.read` 读取长文档的线性文本。
+- `tab.observe` 给出可访问性快照和 opaque Element ref；`tab.read` 读取长文档的线性文本。
 - `tab.act` 等待目标可操作、定位、执行真实输入并等待页面稳定。所有 API 方法都用 `await`；变量、function 和 class 跨调用保留。
 - `tab.expect` 轮询你要确认的结果。页面变化后重新 observe，不要沿用旧引用。
 - 如果 `tab.act` 返回 `openedTabs`，可直接使用其中的 `tab`；若为 `pending:true`，稍后用数字 `tabId` 在 `browser.tabs.list()` 中找到它。下载时把 `download.afterSequence` 传给 `tab.download`，确认文件是否完成。

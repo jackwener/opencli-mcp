@@ -10,6 +10,7 @@ import {
   type AriaArgs, type PointInfo, type FrameProbeResult, type SettleArgs, type SelectResult, type ElementAtResult, type Box, type Expectation, type CheckResult,
   type ReadTextArgs, type ReadTextResult, type DomClickArgs, type DomClickResult, type DomSnapshot, type ObserveFrameArgs, type FrameObservation, type ElementDetails,
 } from '../../../src/shared/page-contract.js';
+import { ARIA_REF_LINE } from '../../../src/shared/element-ref.js';
 import { collapseAria, subtreeByRef } from '../../../src/shared/aria-collapse.js';
 export { collapseAria, subtreeByRef };
 
@@ -27,8 +28,7 @@ function query(selector: string, root: Node = document): Element[] {
   const run = (parsed: any, scope: Node): Element[] => {
     const at = parsed.parts.findIndex((part: any) => part.name === 'aria-ref');
     if (at < 0) return i.querySelectorAll(parsed, scope) as Element[];
-    const el = refToEl.get(parsed.parts[at].body);
-    if (!el?.isConnected) return [];
+    const el = requireRef(parsed.parts[at].body);
     const scopes: Node[] = at ? run({ ...parsed, parts: parsed.parts.slice(0, at) }, scope) : [scope];
     const inside = scopes.some(parent => {
       let node: Node = el;
@@ -64,32 +64,53 @@ function nameOf(el: Element): string {
   try { const u = injected().utils; return u?.getElementAccessibleName ? String(u.getElementAccessibleName(el, false) || '') : u?.getElementAccessibleNameText ? String(u.getElementAccessibleNameText(el, false) || '') : ''; } catch { return ''; }
 }
 
-// ── aria refs: a stable identity per element, kept across snapshots ──
-// Playwright's eN are tree-order and renumber on every insert (a banner at the top shifts every ref below it), which
-// breaks a held ref and floods the diff. We pin the ref to the element itself — like Codex pins observation identity to
-// the DOM backend-node id — so a ref survives inserts/removals: deleted numbers are never reused, new nodes get max+1.
-function lastSnapshot(): { info?: Map<string, { element: Element }> } | null {
-  try { return injected()._lastAriaSnapshotForQuery ?? null; } catch { return null; }
-}
+// ── one element identity across ARIA, DOM, find and actions ──
+// Playwright owns its capture refs. Only our document-local refs cross the public API boundary.
 let refEngine: object | null = null;
-let stableId = new WeakMap<Element, number>();
+let refScope = '';
+let stableId = new WeakMap<Element, string>();
 let nextStableId = 1;
-const refToEl = new Map<string, Element>(); // stable ref → element, for resolving a ref between snapshots
+const refToEl = new Map<string, WeakRef<Element>>();
+let annotatedRefs: string[] = [];
 function resetRefsIfEngineChanged(): void {
-  let e: object | null = null; try { e = injected(); } catch { e = null; }
-  if (e !== refEngine) { refEngine = e; stableId = new WeakMap(); nextStableId = 1; refToEl.clear(); }
+  const engine = injected();
+  if (engine === refEngine) return;
+  refEngine = engine;
+  // Every isolated frame world and engine generation gets its own namespace, including after navigation.
+  refScope = [...crypto.getRandomValues(new Uint8Array(8))].map(n => n.toString(16).padStart(2, '0')).join('');
+  stableId = new WeakMap(); nextStableId = 1; refToEl.clear(); annotatedRefs = [];
 }
-/** The stable ref of an element (assigned on first sight); also registers it for resolution. */
+function liveElement(ref: string): Element | undefined {
+  resetRefsIfEngineChanged();
+  const el = refToEl.get(ref)?.deref();
+  return el?.isConnected && el.ownerDocument === document ? el : undefined;
+}
+function pageError(code: string, message: string, hint: string): Error {
+  return Object.assign(new Error(message), { code, hint });
+}
+function requireRef(ref: string): Element {
+  const el = liveElement(ref);
+  if (!el) throw pageError('stale_ref', `Element ref ${ref} is stale or belongs to another document/frame.`, 'Observe again in the intended frame and use a returned ref with its frame path.');
+  return el;
+}
+/** Register identity without retaining detached elements or evicting live refs from a large capture. */
 function stableRefOf(el: Element): string {
-  let id = stableId.get(el);
-  if (id === undefined) { id = nextStableId++; stableId.set(el, id); }
-  const ref = 'e' + id; refToEl.set(ref, el);
-  // prune here (not only in aria): find/resolve/elementAt also assign refs, and refToEl holds strong element refs
-  if (refToEl.size > 4000) { for (const [k, v] of refToEl) if (!v.isConnected) refToEl.delete(k); if (refToEl.size > 6000) { let drop = refToEl.size - 4000; for (const k of refToEl.keys()) { if (drop-- <= 0) break; refToEl.delete(k); } } }
+  resetRefsIfEngineChanged();
+  let ref = stableId.get(el);
+  if (ref === undefined) {
+    ref = `e${refScope}_${nextStableId++}`;
+    stableId.set(el, ref);
+    if (nextStableId % 512 === 0) {
+      for (const [key, value] of refToEl) {
+        const node = value.deref();
+        if (!node?.isConnected || node.ownerDocument !== document) refToEl.delete(key);
+      }
+    }
+  }
+  refToEl.set(ref, new WeakRef(el));
   return ref;
 }
-/** The stable ref of an element, assigning one if needed. */
-export function ariaRefOf(el: Element): string | null { resetRefsIfEngineChanged(); return stableRefOf(el); }
+export function ariaRefOf(el: Element): string | null { return stableRefOf(el); }
 
 const candidate = (el: Element): Candidate => ({ tag: el.tagName.toLowerCase(), role: el.getAttribute('role') || '', text: text(el).slice(0, 80), ref: ariaRefOf(el), visible: is(el, 'visible'), box: box(el) });
 
@@ -480,45 +501,51 @@ function intersectsViewport(el: Element): boolean {
   for (const r of el.getClientRects()) if (r.width > 0 && r.height > 0 && r.right > 0 && r.bottom > 0 && r.left < vw && r.top < vh) return true;
   return false;
 }
-const REF_LINE = /^(\s*)-\s.*\[ref=(e\d+|f\d+e\d+)\](?: \[[^\]\r\n]+\])*(:.*)?$/;
 export function aria(args: AriaArgs = {}): string {
+  if (args.ref) requireRef(args.ref);
   const i = injected();
+  annotatedRefs = [];
   const raw: string = i.ariaSnapshot(document.body || document.documentElement, { mode: 'ai' });
   resetRefsIfEngineChanged();
-  const snap = lastSnapshot();
-  const info = snap?.info;
-  if (!info) return raw;
+  // Resolve native refs through the same engine that emitted them, synchronously within this capture.
+  const elements = new Map<string, Element>();
+  for (const line of raw.split('\n')) {
+    const match = ARIA_REF_LINE.exec(line);
+    if (!match) continue;
+    let refs: Element[];
+    try { refs = i.querySelectorAll(i.parseSelector(`aria-ref=${match[2]}`), document); }
+    catch { refs = []; }
+    const el = refs[0];
+    if (refs.length !== 1 || !el?.isConnected || el.ownerDocument !== document) {
+      throw pageError('snapshot_ref_unavailable', `Could not resolve captured ref ${match[2]}.`, 'Use tab.observe({format:"dom"}) for independent DOM evidence.');
+    }
+    elements.set(match[2], el);
+  }
   const out: string[] = [];
   let dropBelow: number | null = null; // indent depth of a dropped (offscreen) node: its deeper children go too
   for (const line of raw.split('\n')) {
     const indent = line.length - line.trimStart().length;
     if (dropBelow !== null) { if (indent > dropBelow) continue; dropBelow = null; }
-    const m = REF_LINE.exec(line);
+    const m = ARIA_REF_LINE.exec(line);
     if (!m) { out.push(line); continue; }
-    const el = info.get(m[2])?.element;
-    if (!el) {
-      // An unmapped Playwright ref lives in a DIFFERENT numbering space than our stable eN and can't be resolved by act
-      // (aria-ref=eN → refToEl only holds stable refs). Emitting it raw made e2/e13 collide across elements — so we
-      // never emit a ref we can't back with an element. Keep the node, drop the ref.
-      out.push(line.replace(/\s*\[ref=(?:e\d+|f\d+e\d+)\]/, ''));
-      continue;
-    }
+    const el = elements.get(m[2])!;
     // pin the line to the element's stable ref (identity is independent of the viewport filter below)
-    let rline = line.replace('[ref=' + m[2] + ']', '[ref=' + stableRefOf(el) + ']');
+    let rline = m[1] + stableRefOf(el) + m[3] + (m[4] ?? '');
     // a ref opens that branch even when it is off screen; viewport is not a page of the tree
     if (args.viewport && !args.ref && !intersectsViewport(el)) { dropBelow = indent; continue; }
-    if (m[3] && isCredentialField(el)) { out.push(rline.slice(0, rline.length - m[3].length) + ': <redacted>'); continue; }
+    if (m[4] && isCredentialField(el)) { out.push(rline.slice(0, rline.length - m[4].length) + ': <redacted>'); continue; }
     // Drop a value that just repeats the accessible name (Playwright renders `textbox "X": X` → the reported "X X" dup).
-    if (m[3]) { const val = m[3].replace(/^:\s*/, '').trim(); if (val && rline.includes('"' + val + '"')) rline = rline.slice(0, rline.length - m[3].length); }
+    if (m[4]) { const val = m[4].replace(/^:\s*/, '').trim(); if (val && rline.includes('"' + val + '"')) rline = rline.slice(0, rline.length - m[4].length); }
     out.push(rline);
   }
+  annotatedRefs = [...elements.values()].map(stableRefOf);
   // AX snapshots omit hidden file controls. Include them as addressable upload targets.
-  const inAx = new Set([...info.values()].map((entry) => entry.element));
+  const inAx = new Set(elements.values());
   const missingFiles = [...document.querySelectorAll<HTMLInputElement>('input[type=file]')].filter((el) => !inAx.has(el));
   for (const input of missingFiles.slice(0, 20)) {
     const label = input.labels?.[0]?.textContent?.trim() || input.getAttribute('aria-label') || input.name || 'file upload';
     const hidden = !is(input, 'visible') || !intersectsViewport(input);
-    out.push(`- file-input "${label.replaceAll('"', '\\"').slice(0, 100)}" [ref=${stableRefOf(input)}]${hidden ? ' (hidden)' : ''}${input.multiple ? ' (multiple)' : ''}${input.accept ? ` accepts ${input.accept.slice(0, 100)}` : ''}`);
+    out.push(`- file-input ${JSON.stringify(label.slice(0, 100))} [ref=${stableRefOf(input)}]${hidden ? ' [hidden]' : ''}${input.multiple ? ' [multiple]' : ''}${input.accept ? ': ' + JSON.stringify('accepts ' + input.accept.slice(0, 100)) : ''}`);
   }
   if (missingFiles.length > 20) out.push(`- ${missingFiles.length - 20} more file inputs omitted`);
   // the plugin always ends its state with the focused element; ours names the focused ref so the next action can target it
@@ -649,20 +676,20 @@ export function elementAt(args: { x: number; y: number }): ElementAtResult {
   return { matches_n: chain.length, entries: chain.map(describe) };
 }
 
-// ── screenshot annotation: eN labels on the elements of the last aria snapshot ──
+// ── screenshot annotation: public refs from the last successful ARIA capture ──
 const ANNOTATE_ID = 'opencli-mcp-annotate';
 export function annotate(): number {
   unannotate();
-  const snap = lastSnapshot(); if (!snap?.info) return 0;
+  resetRefsIfEngineChanged();
   const layer = document.createElement('div');
   layer.id = ANNOTATE_ID;
   layer.setAttribute('style', 'all:initial;position:fixed;inset:0;z-index:2147483645;pointer-events:none;font:11px/1 -apple-system,Segoe UI,Arial,sans-serif;');
   let count = 0;
-  for (const [, v] of snap.info) {
-    const el = v?.element; if (!el || !is(el, 'visible') || !intersectsViewport(el)) continue;
+  for (const ref of annotatedRefs) {
+    const el = liveElement(ref); if (!el || !is(el, 'visible') || !intersectsViewport(el)) continue;
     const r = el.getBoundingClientRect();
     const tag = document.createElement('span');
-    tag.textContent = stableRefOf(el); // the label matches the stable ref observe shows
+    tag.textContent = ref; // the label matches the ref observe shows
     tag.setAttribute('style', `position:absolute;left:${Math.max(0, r.left)}px;top:${Math.max(0, r.top - 12)}px;background:#1d4ed8;color:#fff;padding:1px 3px;border-radius:2px;white-space:nowrap;`);
     const outline = document.createElement('div');
     outline.setAttribute('style', `position:absolute;left:${r.left}px;top:${r.top}px;width:${r.width}px;height:${r.height}px;outline:1px solid rgba(29,78,216,.8);`);

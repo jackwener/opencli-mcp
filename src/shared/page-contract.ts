@@ -29,7 +29,7 @@ export interface Resolved {
   hit: 'target' | 'other';
   blocker: string | null;
   editable: boolean; checkable: boolean; checked: boolean; isSelect: boolean;
-  /** aria ref (eN) when the element is in the last aria snapshot */
+  /** opaque Element ref shared across observation and action */
   ref: string | null;
   /** Playwright-generated selector for replay */
   selector: string | null;
@@ -54,7 +54,7 @@ export interface QueryFindResult { matches_n: number; entries: Array<FindEntry &
 export interface AriaArgs {
   /** only the subtree of elements intersecting the viewport */
   viewport?: boolean;
-  /** open one branch of a previous snapshot (`eN`). Ignores viewport so an off-screen collapsed branch can be read. */
+  /** open one branch of a previous snapshot (opaque ref). Ignores viewport so an off-screen collapsed branch can be read. */
   ref?: string;
   /** character budget before branches with a ref collapse. The host uses the default; tests pass a small one. */
   budget?: number;

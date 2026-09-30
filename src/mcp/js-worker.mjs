@@ -49,7 +49,9 @@ async function drain(run, outcome) {
   }
   return outcome;
 }
-const errorData = e => ({ name: e?.name ?? 'Error', message: e?.message ?? String(e), stack: e?.stack, code: e?.code, hint: e?.hint, data: e?.data });
+const errorData = e => ({ name: e?.name ?? 'Error', message: e?.message ?? String(e), stack: e?.stack, code: e?.code, hint: e?.hint ?? (e?.name === 'SyntaxError' && /Illegal return statement/.test(e.message)
+  ? 'This cell runs at REPL top level. Replace `return value;` with `value;` or use `nodeRepl.write(value)`. `return` is valid inside functions.'
+  : undefined), data: e?.data });
 
 function encode(value, seen = new WeakSet()) {
   if (value && handles.has(value)) return handles.get(value);

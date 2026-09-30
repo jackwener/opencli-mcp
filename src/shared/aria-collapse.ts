@@ -1,13 +1,15 @@
+import { ARIA_REF_LINE } from './element-ref.js';
+
 /** Character budget for the action map returned to the model. The cached tree used for diff stays whole. */
 export const ARIA_BUDGET = 24_000;
 export const COLLAPSE_NOTE = 'Collapsed branches keep their [ref]. Observe again with that ref and the same frame path to open one branch. This tree is the action map; read the document with tab.read().';
 
 function lineIndent(line: string): number { return line.length - line.trimStart().length; }
 
-/** The line that carries `[ref=eN]` plus the deeper lines under it. */
+/** The line that carries an element ref plus the deeper lines under it. */
 export function subtreeByRef(text: string, ref: string): string | null {
   const lines = text.split('\n');
-  const i = lines.findIndex((l) => l.includes(`[ref=${ref}]`));
+  const i = lines.findIndex((l) => ARIA_REF_LINE.exec(l)?.[2] === ref);
   if (i < 0) return null;
   const base = lineIndent(lines[i]);
   let end = i;
@@ -26,7 +28,7 @@ export function collapseAria(text: string, budget: number): { text: string; coll
   while (size() > budget) {
     let best: { i: number; end: number; gain: number } | null = null;
     for (let i = 0; i < lines.length; i++) {
-      if (!/\[ref=e\d+\]/.test(lines[i]) || lines[i].includes('(collapsed)')) continue;
+      if (!ARIA_REF_LINE.test(lines[i]) || lines[i].includes('(collapsed)')) continue;
       const base = lineIndent(lines[i]);
       let end = i;
       for (let j = i + 1; j < lines.length; j++) {

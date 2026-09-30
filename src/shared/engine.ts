@@ -5,6 +5,7 @@
  * One act = locate (strict, unique-visible fallback) → states (visible/enabled/editable) → scroll (three alignments)
  * → wall-clock stable box → hit-test → cursor overlay → real CDP mouse/keyboard → navigation wait → DOM settle.
  */
+import { ELEMENT_REF } from './element-ref.js';
 import type { ActSpec, ActResult, ActTarget, FrameStep } from '../protocol.js';
 import { ENGINE_GLOBAL, PAGE_GLOBAL, type ResolveOutcome, type Resolved, type PointInfo, type SelectResult } from './page-contract.js';
 export { ENGINE_GLOBAL, PAGE_GLOBAL, ACT_MARK } from './page-contract.js';
@@ -29,11 +30,19 @@ export function installEngineJs(injectedSource: string, pageModuleSource: string
 /** The expression the host evaluates in a world to call one page-module function with JSON arguments. */
 export function pageCallJs(fn: string, args: unknown): string {
   if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(fn)) throw new Error(`invalid page function name ${fn}`);
-  return `globalThis.${PAGE_GLOBAL}.${fn}(${args === undefined ? '' : JSON.stringify(args)})`;
+  return `(async () => { try { return await globalThis.${PAGE_GLOBAL}.${fn}(${args === undefined ? '' : JSON.stringify(args)}); }
+    catch (e) { return { __opencliPageError: { code: e?.code ?? 'page_error', message: e?.message ?? String(e), hint: e?.hint } }; } })()`;
 }
 
 export class ActError extends Error {
   constructor(readonly code: string, message: string, readonly hint?: string, readonly extra?: Record<string, unknown>) { super(message); }
+}
+
+/** Restore page errors after the JSON boundary, including observation and frame-routing failures. */
+export function unwrapPageResult(value: unknown): unknown {
+  const error = (value as { __opencliPageError?: { code: string; message: string; hint?: string } } | null)?.__opencliPageError;
+  if (error) throw new ActError(error.code, error.message, error.hint);
+  return value;
 }
 
 /** Compile an agent target into a Playwright selector (the same engines the plugin uses). */
@@ -43,11 +52,11 @@ export function targetToSelector(t: ActTarget): string | null {
   const scope = scopeSelector(t.within);
   return scope ? `${scope} >> ${inner}` : inner;
 }
-/** A container to resolve inside: a selector (css or Playwright syntax) or an eN ref. */
+/** A container to resolve inside: a selector (css or Playwright syntax) or an observed ref. */
 function scopeSelector(within: string | undefined): string | null {
   if (!within) return null;
   const w = within.trim();
-  if (/^(?:f\d+)?e\d+$/.test(w)) return `aria-ref=${w}`;
+  if (ELEMENT_REF.test(w)) return `aria-ref=${w}`;
   return w;
 }
 function innerSelector(t: ActTarget): string | null {
@@ -55,7 +64,7 @@ function innerSelector(t: ActTarget): string | null {
   const nth = typeof t.nth === 'number' ? ` >> nth=${t.nth}` : '';
   if (t.ref !== undefined && t.ref !== null) {
     const r = String(t.ref);
-    if (/^e\d+$/.test(r) || /^f\d+e\d+$/.test(r)) return `aria-ref=${r}`; // aria snapshot refs — the one ref space
+    if (ELEMENT_REF.test(r)) return `aria-ref=${r}`;
     return null;
   }
   if (t.selector) return `${t.selector}${nth}`;
@@ -130,7 +139,7 @@ async function resolve(io: ActIO, spec: ActSpec, target: ActTarget, timeoutMs: n
     return { ok: true, x: target.x, y: target.y, matches_n: 1, tag: r.tag, hit: 'target', blocker: null, editable: r.editable, checkable: false, checked: false, isSelect: r.isSelect, ref: null, selector: null, usedSelector: `point:${target.x},${target.y}` };
   }
   const selector = targetToSelector(target);
-  if (!selector) throw new ActError('invalid_target', 'target needs an aria ref (eN), a selector, x/y, or a semantic locator (role/name/label/text/testid)');
+  if (!selector) throw new ActError('invalid_target', 'target needs an observed ref, a selector, x/y, or a semantic locator (role/name/label/text/testid)');
   const fallback = fallbackSelector(target);
   const strict = WRITE_KINDS.has(spec.kind);
   const states = spec.kind === 'hover' || spec.kind === 'focus' || spec.kind === 'scroll' ? ['visible'] : spec.kind === 'fill' || spec.kind === 'type' ? ['visible', 'enabled', 'editable'] : ['visible', 'enabled'];
@@ -295,7 +304,7 @@ async function performDomClick(io: ActIO, spec: ActSpec): Promise<ActResult> {
   if (spec.kind !== 'click') throw new ActError('invalid_args', 'method "dom" is only for click.', 'Real mouse input is the default. method:"dom" is the one click that has no layout box.');
   if (typeof spec.target.x === 'number') throw new ActError('invalid_args', 'method "dom" needs an element, not a point.', 'A point has no HTMLElement.click().');
   const selector = targetToSelector(spec.target);
-  if (!selector) throw new ActError('invalid_target', 'target needs an aria ref (eN), a selector, or a semantic locator (role/name/label/text/testid)');
+  if (!selector) throw new ActError('invalid_target', 'target needs an observed ref, a selector, or a semantic locator (role/name/label/text/testid)');
   const timeoutMs = spec.timeoutMs ?? 3000;
   const started = Date.now();
   const res = await io.call('domClick', { selector, fallback: fallbackSelector(spec.target) }) as { ok?: true; error?: { code: string; message: string; hint?: string; candidates?: unknown[] }; ref?: string | null; tag?: string; selector?: string | null; x?: number; y?: number; matches_n?: number };

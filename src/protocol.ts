@@ -96,7 +96,7 @@ export interface Command {
 }
 
 export type ActKind = 'click' | 'dblclick' | 'hover' | 'focus' | 'fill' | 'type' | 'press' | 'check' | 'uncheck' | 'select' | 'scroll' | 'upload' | 'drag';
-export interface ActTarget { ref?: number | string; /** raw Playwright selector, e.g. the `selector` returned by find */ selector?: string; /** scope: selector of a container, or an eN ref — the target is resolved inside it (generic labels are ambiguous by default; scope them) */ within?: string; nth?: number; role?: string; name?: string; label?: string; text?: string; testid?: string; x?: number; y?: number; /** iframe(s) to enter first, outermost first: css selector of the <iframe> or its 0-based index; a string may chain with ' >> ' (Codex enter-frame); same- and cross-origin frames are handled alike */ frame?: FrameStep | FrameStep[] }
+export interface ActTarget { ref?: number | string; /** raw Playwright selector, e.g. the `selector` returned by find */ selector?: string; /** scope: selector of a container, or an observed ref — the target is resolved inside it (generic labels are ambiguous by default; scope them) */ within?: string; nth?: number; role?: string; name?: string; label?: string; text?: string; testid?: string; x?: number; y?: number; /** iframe(s) to enter first, outermost first: css selector of the <iframe> or its 0-based index; a string may chain with ' >> ' (Codex enter-frame); same- and cross-origin frames are handled alike */ frame?: FrameStep | FrameStep[] }
 export type FrameStep = string | number;
 export interface ActSpec {
   kind: ActKind;
