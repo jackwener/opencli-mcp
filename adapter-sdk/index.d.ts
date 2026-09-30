@@ -36,6 +36,7 @@ export interface Tab {
   readonly id: string;
   goto(url: string, opts?: { waitUntil?: 'load' | 'none'; settleMs?: number }): Promise<{ url: string | null; title: string | null }>;
   url(): Promise<string | null>;
+  reload(): Promise<void>;
   title(): Promise<string | null>;
   observe(opts?: Record<string, unknown>): Promise<Record<string, unknown>>;
   act(opts: Record<string, unknown>): Promise<Record<string, unknown>>;

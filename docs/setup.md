@@ -28,10 +28,10 @@ opencli-mcp setup --clients manual  # show configuration for any MCP client
 opencli-mcp setup --clients none    # configure only the browser connection
 opencli-mcp setup --no-open       # print the store link without opening it
 opencli-mcp setup --wait 60       # wait up to 60 seconds (default: 180)
-opencli-mcp setup --no-open --wait 0  # configure and check once without waiting
+opencli-mcp setup --no-open --wait 0  # save registration, then check the connection once
 ```
 
-A timeout leaves the configuration in place: enable the extension and rerun setup. A detected client registration failure is reported as incomplete even if the browser is connected. If a selected CLI is unavailable, setup reports it before writing any configuration. In an interactive terminal, invalid input can be corrected and Ctrl+C cancels without making changes.
+A timeout leaves the configuration in place: enable the extension and rerun setup. In particular, `--wait 0` can exit with code **1** after printing `Browser connection registered` and `Your registration has been saved`: registration succeeded, but the extension was not connected at the one-time check. Exit code **0** means both the live connection check and any selected client registrations succeeded. A detected client registration failure is reported as incomplete even if the browser is connected. If a selected CLI is unavailable, setup reports it before writing any configuration. In an interactive terminal, invalid input can be corrected and Ctrl+C cancels without making changes.
 
 `opencli-mcp doctor` checks registration and the live connection without changing settings. It is for troubleshooting; it is not a required setup step.
 
@@ -183,6 +183,7 @@ Run `opencli-mcp doctor` first. It reports startup dependencies, browser registr
 
 | Symptom | What to check |
 |---|---|
+| `Specified native messaging host not found.` | Chrome cannot find its Native Messaging registration; follow the [Windows recovery path](#windows-native-messaging-recovery) below |
 | `browser_unavailable` or host unreachable | Keep Chrome running, enable the extension, and verify the host registration |
 | Web Store extension cannot connect | Run `opencli-mcp setup`; if it stays disconnected, disable and re-enable the extension |
 | No host manifest was written | Rerun `setup`; for custom profiles, pass `--user-data-dir` |
@@ -191,3 +192,42 @@ Run `opencli-mcp doctor` first. It reports startup dependencies, browser registr
 | Development changes do not appear | Rebuild the extension and click **Reload** on the extensions page |
 
 For runtime errors such as `dialog_open` or stale tabs, see [browser troubleshooting](troubleshooting.md) and [error codes](errors.md).
+
+### Windows Native Messaging recovery
+
+Chrome may report:
+
+```text
+[opencli-mcp] native host disconnected after 4ms (attempt 1) Specified native messaging host not found.
+```
+
+An enabled MCP client entry does not establish the browser connection. The two connections are separate: the MCP client launches the MCP transport, while Chrome locates and launches the Native Messaging host through its own registration. On Windows, setup writes the host manifest and launcher, and registers the manifest path under `HKCU\Software\Google\Chrome\NativeMessagingHosts\com.opencli.mcp` for the current Windows user. Run setup as the same user who runs Chrome; administrator access is not required.
+
+1. If using an old package, update it with `npm install -g opencli-mcp@latest`. After an update or a Node.js installation change, refresh the browser registration:
+
+   ```powershell
+   opencli-mcp setup --clients none --no-open --wait 0
+   opencli-mcp doctor --json
+   ```
+
+   `--clients none` preserves existing MCP client settings. Use `opencli-mcp setup` instead if the client also needs configuring. Check the setup output: exit code 1 together with `Your registration has been saved` means the live browser connection is still pending, not that registration was rolled back.
+
+2. Interpret the diagnostics by stage:
+
+   | Diagnostic | Meaning and next step |
+   |---|---|
+   | Manifest `present: false`, `launcherExists: false`, `launcherMatches: false`, or `authorized: false` | The registration files are incomplete, point to an old launcher, or do not authorize the published extension. Rerun setup and resolve any error it prints. |
+   | `launch.ready: false` | Startup dependencies are missing or inconsistent. Read `launch.errors`; reinstall a missing Node runtime or package, then run setup from a working installation. A host that is still running does not prove its next launch will work. |
+   | Registration fields and `launch.ready` true, but `host.running: false` / `no host state file` | Startup files pass, but doctor has not reached a live host. Keep Chrome open, install or enable the extension, then disable and re-enable it in `chrome://extensions` if needed. |
+   | `host.running: true`, `extensionConnected: false` | The host is reachable but its extension connection is missing. Enable or restart the extension. |
+   | `ok: true` | Startup dependencies, registration files, and the live host/extension connection pass. Reconnect the MCP client and try opening and reading `https://example.com/`. |
+
+   For an unpacked extension, use **Reload** after updating its files. Chrome Web Store extensions update separately from the npm package.
+
+3. Run `opencli-mcp doctor` again after reconnecting. If Chrome still says `Specified native messaging host not found.`, inspect the registration from the same Windows account:
+
+   ```powershell
+   reg query "HKCU\Software\Google\Chrome\NativeMessagingHosts\com.opencli.mcp" /ve
+   ```
+
+   The default value must point to the existing Chrome manifest reported by doctor. Doctor checks the runtime and program entry, launcher consistency, manifest file, authorized extension origin, and live connection; it does **not** currently verify the Windows registry value. A missing or stale registry value needs setup again under the Windows account running Chrome.

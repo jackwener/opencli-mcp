@@ -12,3 +12,11 @@ Built-in adapters cover Twitter/X (`twitter`), Bilibili (`bilibili`), and Reddit
 - `tools.define` creates an inactive draft. `tools.try` executes it with real arguments and checks an explicit result assertion. `tools.activate` publishes a passing draft under `~/.opencli-mcp/adapters/<site>/<command>.js`; only then does it appear in search and `site_run`. User adapters override built-ins with the same site and command. A typed tool appears after `sites.enable(site)` in `js` (`write:true` for write commands).
 
 For authoring, call `docs_get` with `name: "define-tools"`.
+
+### X search pagination
+
+`twitter/search` reads SearchTimeline responses produced by X's signed-in web UI, including the site's current request ID and authentication. It does not replay a hardcoded GraphQL endpoint. `limit` is 1–100 tweets per call; results preserve UI order and deduplicate tweet IDs.
+
+Pass `nextCursor` with the same `query` and `sort` to continue. It refers to retained Network evidence from that live search, including any unreturned tweets on the current page. Continue before navigating or refreshing the adapter tab or starting another X search. Closed tabs, host restarts, and evidence eviction also invalidate cursors; an invalid cursor returns `invalid_args` with instructions to start again. Cursors are temporary continuation tokens, not durable bookmarks.
+
+An empty `rows` array means a verified empty or exhausted timeline. Missing responses, timeouts, HTTP errors, and incomplete capture return errors instead of implying the search is exhausted. `nextCursor` means continuation is available, not a guarantee that X has more matching tweets.

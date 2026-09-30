@@ -13,6 +13,7 @@ import { ExtensionBridge } from '../dist/src/host/bridge.js';
 import { NativeChannel, FrameDecoder, encodeFrame } from '../dist/src/host/native-messaging.js';
 import { Runtime } from '../dist/src/runtime/runtime.js';
 import { createMcpServer } from '../dist/src/mcp/server.js';
+import { timeline, searchUrl } from '../tests/fixtures/twitter-search.mjs';
 
 const scratch = await mkdtemp(join(tmpdir(), 'opencli-native-smoke-'));
 const ext = join(scratch, 'extension');
@@ -162,6 +163,44 @@ try {
   assert((await adapterEvents.read()).entries.some(e => e.message === 'adapter-stream'));
   await adapterEvents.close();
   await adapterPage.finalize([]);
+  // Exercise site_run with the real adapter, capture and scroll implementation.
+  // X responses are deterministic fixtures; no signed-in user profile is involved.
+  let searches = 0, requests = 0;
+  await context.route('https://x.com/**', async route => {
+    const requestUrl = new URL(route.request().url());
+    if (requestUrl.pathname === '/search') {
+      searches++;
+      const initial = JSON.stringify(searchUrl().replace('rotating-query-id', `build-${searches}`));
+      const next = JSON.stringify(searchUrl('OpenAI', 'Latest', 'page-2').replace('rotating-query-id', `build-${searches}`));
+      await route.fulfill({ contentType: 'text/html', body: `<!doctype html><title>X search fixture</title>
+        <main style="height:6000px">Search results</main><script>
+        let ready = false, sent = false;
+        fetch(${initial}).then(r=>r.json()).then(()=>{ready=true});
+        addEventListener('scroll',()=>{if(ready && !sent){sent=true;fetch(${next}).then(r=>r.json())}});
+        </script>` });
+    } else if (requestUrl.pathname.endsWith('/SearchTimeline')) {
+      requests++;
+      const variables = JSON.parse(requestUrl.searchParams.get('variables'));
+      await new Promise(resolve => setTimeout(resolve, 120));
+      await route.fulfill({ contentType: 'application/json', body: JSON.stringify(variables.cursor ? timeline(['2', '3']) : timeline(['1', '2'], 'page-2')) });
+    } else await route.fulfill({ status: 404, body: '' });
+  });
+  const searchArgs = { query: 'OpenAI', sort: 'latest', limit: 1 };
+  assert.equal((await runtime.registry.resolve('twitter', 'search')).source, 'builtin', 'Remove the user override before testing the built-in search adapter.');
+  const search = (args, failure = false) => call('site_run', { site: 'twitter', command: 'search', args: { ...searchArgs, ...args } }, failure);
+  const firstSearch = await search();
+  assert.deepEqual(firstSearch.rows.map(t => t.id), ['1']);
+  assert(firstSearch.nextCursor);
+  const continued = await search({ cursor: firstSearch.nextCursor, limit: 2 });
+  assert.deepEqual(continued.rows.map(t => t.id), ['2', '3']);
+  assert.equal(continued.nextCursor, undefined);
+  assert.deepEqual((await search({ cursor: firstSearch.nextCursor, limit: 2 })).rows, continued.rows);
+  assert.equal(searches, 1); assert.equal(requests, 2);
+  await search(); // Starting the same query again must reload, not reuse stale evidence.
+  assert.equal(searches, 2); assert.equal(requests, 3);
+  assert.equal((await search({ cursor: firstSearch.nextCursor }, true)).error.code, 'invalid_args');
+  await (await runtime.getAdapterPage('twitter')).finalize([]);
+  console.log('Passed: site_run → live extension → UI-generated search responses, scroll pagination, retained remainder, cursor retry and fresh-search invalidation.');
   console.log('Passed: real Chrome query/create/ownership, MCP docs, REPL function evaluation, CDP, event capture/loss, page/extension logs, timeout without replay, reset and finalize.');
 } finally {
   await session?.close(); await client?.close(); channel?.close();
