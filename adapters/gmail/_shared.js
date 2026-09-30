@@ -105,7 +105,7 @@ export async function gmailLabels(tab, account = 0) {
 }
 
 /** Capture Gmail's own request as a short-lived template for its JSON API. */
-async function gmailRequestTemplate(tab, query, account) {
+export async function gmailRequestTemplate(tab, query, account) {
   const normalized = clean(query);
   if (!normalized) throw errors.argument('Gmail search query cannot be empty');
   const path = `/sync/u/${account}/i/bv`;
@@ -118,7 +118,10 @@ async function gmailRequestTemplate(tab, query, account) {
   for (let attempt = 0; attempt < 20 && !entry; attempt++) {
     const page = await tab.network.read({ pattern: path, afterSequence: cursor, limit: 100 });
     cursor = page.cursor;
-    entry = page.entries.find((item) => item.method === 'POST' && item.requestBodyPreview && !item.requestBodyTruncated && item.responseStatus === 200);
+    entry = page.entries.find((item) => {
+      if (item.method !== 'POST' || !item.requestBodyPreview || item.requestBodyTruncated || item.responseStatus !== 200) return false;
+      try { return JSON.parse(item.requestBodyPreview)?.[0]?.[3] === normalized; } catch { return false; }
+    });
     if (!entry) await new Promise((resolve) => setTimeout(resolve, 250));
   }
   if (!entry) throw errors.upstream('Gmail did not issue a batch-view API request');
@@ -138,11 +141,40 @@ export async function gmailBatchView(tab, query, account = 0) {
 
 export function syncThreadId(value) {
   const raw = clean(value);
-  const direct = raw.replace(/^#/, '').match(/^thread-f:(\d+)$/);
-  if (direct) return `thread-f:${direct[1]}`;
+  const direct = raw.replace(/^#/, '').match(/^thread-([fa]):(r?\d+)$/);
+  if (direct) return `thread-${direct[1]}:${direct[2]}`;
   const hex = raw.match(/(?:^|\/|#)([a-f\d]{10,})\/?$/i)?.[1];
   if (hex) return `thread-f:${BigInt(`0x${hex}`).toString(10)}`;
   throw errors.argument('thread must be a Gmail thread ID or Gmail thread URL');
+}
+
+export async function gmailSyncMutation(tab, operations, account = 0) {
+  if (!Array.isArray(operations) || !operations.length) throw errors.argument('Gmail mutation requires an operation');
+  const { url, headers } = await gmailRequestTemplate(tab, 'in:anywhere', account);
+  const syncUrl = url.replace('/i/bv?', '/i/s?');
+  if (syncUrl === url) throw errors.upstream('Gmail batch-view URL cannot be converted to sync URL');
+  const body = [null, [operations], null, null, 2];
+  if (operations.some((operation) => [2, 6].includes(operation[0]))) body[0] = [null, null, 2];
+  let response;
+  try { response = await tab.fetchJson(syncUrl, { method: 'POST', headers, body }); }
+  catch (cause) { throw errors.upstream(`Gmail sync API failed; check the mailbox before retrying: ${String(cause?.message || cause)}`); }
+  const statuses = response?.[0]?.[0];
+  if (!Array.isArray(statuses) || statuses.length !== operations.length || statuses.some((row, index) => row?.[0] !== operations[index][0] || row?.[1] !== 0)) {
+    throw errors.upstream('Gmail sync API did not confirm every operation; check the mailbox before retrying');
+  }
+  return statuses;
+}
+
+export function gmailMessageId(value) {
+  const id = clean(value).replace(/^#/, '');
+  if (!/^msg-[fa]:r?\d+$/.test(id)) throw errors.argument('message must be a Gmail message ID');
+  return id;
+}
+
+export function gmailLabelOperation(threadId, messageIds, add = [], remove = []) {
+  if (!messageIds.length) throw errors.argument('At least one Gmail message is required');
+  const node = [null, null, null, null, null, null, [add.length ? add : null, remove.length ? remove : null, messageIds]];
+  return [3, [threadId, node]];
 }
 
 const htmlToText = (value) => String(value || '')
