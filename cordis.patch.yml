@@ -4,7 +4,11 @@
       config:
         serverName: opencli-mcp
         transport: stdio
-        command: !!js process.env.OPENCLI_MCP_BIN || 'opencli-mcp'
+        command: !!js >-
+          process.env.OPENCLI_MCP_BIN ||
+          (process.platform === 'win32' ? process.env.USERPROFILE : process.env.HOME) +
+          '/.opencli-mcp/bin/opencli-mcp-launcher' +
+          (process.platform === 'win32' ? '.cmd' : '')
         args: ['stdio']
         env: {}
         cwd: !!js process.cwd()

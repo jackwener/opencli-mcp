@@ -8,9 +8,9 @@ opencli-mcp 是一个连接到真实 Chrome 的 MCP browser service。Chrome ext
 
 1. 从 [Chrome Web Store](https://chromewebstore.google.com/detail/opencli-mcp/lnaoghmfcdnbhgcihkakfobckmfhllkg) 安装 extension。
 2. 在终端运行 `npm install -g opencli-mcp`，然后运行 `opencli-mcp setup`。
-3. 按提示选择要配置的 MCP client。重启或重新连接 client 后即可使用。`opencli-mcp doctor` 只检查连接状态，不修改配置。
+3. 按提示选择要配置的 MCP client。重启或重新连接 client 后即可使用。`opencli-mcp doctor` 只检查启动依赖与连接状态，不修改配置。
 
-`setup` 注册 Chrome Native Messaging host，按你的选择配置 MCP client，并等待 extension 连接。它不会自动安装 extension，也不会覆盖已有的 MCP client 条目。详细选项与排障步骤见 [安装说明](setup.md)。
+`setup` 注册 Chrome Native Messaging host，按你的选择配置 MCP client，并等待 extension 连接。所选 client 的 `opencli-mcp` entry 会更新为固定的 launcher 路径，其他 server entry 保持不变。Homebrew 同一 formula 内升级时，launcher 使用稳定的 `opt` 路径；切换 Node 安装或移动 package 后，重新运行 setup 即可更新启动路径。它不会自动安装 extension。详细选项与排障步骤见 [安装说明](setup.md)。
 
 使用 DeepSeek Harness (`dsh`) 时，先运行 `opencli-mcp setup --clients none`，再运行 `dsh plugin --profile web add opencli-mcp`。主包内的 bundle 通过 dsh 自带的 MCP client 接入 browser service；具体说明见 [dsh 安装步骤](setup.md#deepseek-harness-dsh)。
 

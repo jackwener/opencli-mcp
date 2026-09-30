@@ -1,12 +1,11 @@
 /** Set up both connections: Chrome → local host, MCP client → local host. */
 import { execFile, execFileSync, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
-import { registerHost, projectRoot } from './registration.js';
+import { registerHost } from './registration.js';
 import { doctor } from './doctor.js';
 import { EXTENSION_STORE_URL } from './extension.js';
 import { registerOpenCode } from './opencode.js';
 import { registerPi } from './pi.js';
-import path from 'node:path';
 import { createInterface } from 'node:readline/promises';
 
 const say = (line: string): void => { process.stdout.write(`${line}\n`); };
@@ -76,12 +75,13 @@ function registerClients(c: StdioCommand, selected: string[]): ClientRegistratio
     const bin = which(client.bin);
     if (!bin) { results.push({ name: client.name, status: 'failed' }); continue; }
     const options = { stdio: 'ignore' as const, timeout: 15_000 };
+    let exists = false;
     try {
       execFileSync(bin, ['mcp', 'get', 'opencli-mcp'], options);
-      results.push({ name: client.name, status: 'existing' });
-      continue;
-    } catch { /* No existing registration; try to add it. */ }
+      exists = true;
+    } catch { /* No readable registration; let add report any configuration error. */ }
     try {
+      if (exists) execFileSync(bin, ['mcp', 'remove', ...client.scope, 'opencli-mcp'], options);
       execFileSync(bin, ['mcp', 'add', ...client.scope, 'opencli-mcp', '--', c.command, ...c.args], options);
       results.push({ name: client.name, status: 'registered' });
     } catch { results.push({ name: client.name, status: 'failed' }); }
@@ -119,11 +119,11 @@ export async function setup(opts: { waitMs?: number; noOpen?: boolean; browsers?
   say(`1/3  Browser connection registered: ${written.map((m) => m.browser).join(', ')}.`);
 
   // Absolute paths work in desktop clients even when their PATH differs from the terminal's.
-  const command = { command: process.execPath, args: [path.join(projectRoot(), 'dist', 'src', 'main.js')] };
+  const command = { command: registration.launcher, args: ['stdio'] };
   const clients = registerClients(command, selected);
   say('2/3  MCP clients:');
   for (const client of clients) {
-    const status = client.status === 'existing' ? 'already configured (existing settings kept)' : client.status === 'registered' ? 'registered' : 'registration failed — use the configuration below';
+    const status = client.status === 'existing' ? 'already configured with this launcher' : client.status === 'registered' ? 'registered' : 'registration failed — use the configuration below';
     say(`     ${client.name}: ${status}.`);
   }
   if (selected.includes('none')) say('     Skipped; no MCP client settings were changed.');

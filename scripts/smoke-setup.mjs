@@ -10,13 +10,24 @@ import { Client } from '@modelcontextprotocol/client';
 import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 
 const exec = promisify(execFile);
-const root = fs.mkdtempSync(path.join(os.tmpdir(), 'opencli-setup-e2e-'));
+const root = fs.mkdtempSync(path.join(os.tmpdir(), "opencli setup ' $ e2e-"));
 const home = path.join(root, 'home');
 const preload = path.join(root, 'environment.mjs');
 const clientState = path.join(root, 'clients.json');
 const entry = path.resolve('dist/src/main.js');
 const storeId = 'lnaoghmfcdnbhgcihkakfobckmfhllkg';
-const env = { ...process.env, OPENCLI_SETUP_TEST_ROOT: root };
+const brew = path.join(root, 'custom brew');
+const keg = version => path.join(brew, 'Cellar', 'node@22', version);
+const opt = path.join(brew, 'opt', 'node@22');
+function installNode(version) {
+  fs.mkdirSync(path.join(keg(version), 'bin'), { recursive: true });
+  fs.symlinkSync(process.execPath, path.join(keg(version), 'bin', 'node'));
+  fs.mkdirSync(path.dirname(opt), { recursive: true });
+  fs.rmSync(opt, { force: true });
+  fs.symlinkSync(keg(version), opt);
+}
+installNode('22.0.0');
+const env = { ...process.env, OPENCLI_SETUP_TEST_ROOT: root, OPENCLI_SETUP_TEST_NODE: path.join(keg('22.0.0'), 'bin', 'node') };
 let host;
 let mcp;
 let stderr = '';
@@ -31,6 +42,7 @@ import child from 'node:child_process';
 import { syncBuiltinESMExports } from 'node:module';
 const root = process.env.OPENCLI_SETUP_TEST_ROOT;
 os.homedir = () => path.join(root, 'home');
+if (process.env.OPENCLI_SETUP_TEST_NODE) Object.defineProperty(process, 'execPath', { value: process.env.OPENCLI_SETUP_TEST_NODE });
 if (process.env.OPENCLI_SETUP_TEST_TTY) {
   Object.defineProperty(process.stdin, 'isTTY', { value: true });
   Object.defineProperty(process.stdout, 'isTTY', { value: true });
@@ -51,8 +63,13 @@ child.execFileSync = (file, args) => {
       if (state[file]) return JSON.stringify(state[file]);
       throw new Error('not registered');
     }
+    if (args[1] === 'remove') {
+      delete state[file];
+      fs.writeFileSync(statePath, JSON.stringify(state));
+      return '';
+    }
     if (args[1] === 'add') {
-      if (state[file]) throw new Error('existing entry must not be overwritten');
+      if (state[file]) throw new Error('remove the existing entry before adding');
       state[file] = args;
       fs.writeFileSync(statePath, JSON.stringify(state));
       return '';
@@ -135,14 +152,21 @@ try {
   const clients = fs.readFileSync(clientState, 'utf8');
   const entries = JSON.parse(clients);
   assert.equal(Object.keys(entries).length, 2);
-  for (const args of Object.values(entries)) assert.deepEqual(args.slice(args.indexOf('--') + 1), [process.execPath, entry]);
+  for (const args of Object.values(entries)) assert.deepEqual(args.slice(args.indexOf('--') + 1), [manifest.path, 'stdio']);
   console.log('PASS client choice: no implicit registration, interactive selection, cancellation, and explicit client selection');
 
+  // Simulate brew upgrade and cleanup: the old runtime path disappears, opt follows the new keg.
+  installNode('22.1.0');
+  fs.rmSync(keg('22.0.0'), { recursive: true });
+  env.OPENCLI_SETUP_TEST_NODE = path.join(keg('22.1.0'), 'bin', 'node');
   const stateDir = path.join(home, '.opencli-mcp');
+  const installationFile = path.join(stateDir, 'installation.json');
+  assert.equal(JSON.parse(fs.readFileSync(installationFile, 'utf8')).node, path.join(opt, 'bin', 'node'));
+  assert.equal(JSON.parse(await cli(['doctor', '--json'], 1)).launch.ready, true);
   fs.writeFileSync(path.join(stateDir, 'config.json'), '{"port":0}');
   // Execute the actual generated launcher; preload only isolates its home and process discovery.
-  const launcherEnv = { ...env, NODE_OPTIONS: `--import=${JSON.stringify(preload)}` };
-  host = spawn(manifest.path, [], { env: launcherEnv, stdio: ['pipe', 'pipe', 'pipe'] });
+  const launcherEnv = { ...env, OPENCLI_SETUP_TEST_NODE: '', NODE_OPTIONS: `--import=${JSON.stringify(preload)}` };
+  host = spawn(manifest.path, ['chrome-extension://' + storeId + '/'], { env: launcherEnv, stdio: ['pipe', 'pipe', 'pipe'] });
   host.stderr.on('data', (chunk) => { stderr += chunk; });
   host.stdout.resume();
   const { encodeFrame } = await import('../dist/src/host/native-messaging.js');
@@ -160,14 +184,16 @@ try {
   assert.match(connected.host.protocolWarning, /Browser commands remain available/);
   assert(connected.advice.some((line) => line.startsWith('Warning: Extension protocol')));
   assert(!('built' in connected.extension));
+  // Replace stale selected commands; do not confuse entry existence with correctness.
+  fs.writeFileSync(clientState, JSON.stringify({ '/fake/codex': ['stale'], '/fake/claude': ['stale'] }));
   const repeated = await cli(['setup', '--clients', 'claude,codex', '--no-open', '--wait', '0']);
   assert(repeated.includes('Setup complete'));
   assert(!repeated.includes('chromewebstore.google.com'));
-  assert.equal(fs.readFileSync(clientState, 'utf8'), clients);
-  console.log('PASS connected rerun: existing client settings preserved, live native host detected');
+  assert.deepEqual(JSON.parse(fs.readFileSync(clientState, 'utf8')), entries);
+  console.log('PASS upgrade and repair: old Node removed, native host starts, selected client commands repaired');
 
   // The client command setup registered must actually negotiate MCP and expose browser tools.
-  const transport = new StdioClientTransport({ command: process.execPath, args: ['--import', preload, entry], env, stderr: 'pipe' });
+  const transport = new StdioClientTransport({ command: manifest.path, args: ['stdio'], env: launcherEnv, stderr: 'pipe' });
   mcp = new Client({ name: 'setup-e2e', version: '0.0.0' });
   await mcp.connect(transport);
   const tools = await mcp.listTools();
@@ -194,6 +220,78 @@ try {
   await cli(['setup', '--no-open', '--wait', '0']);
   assert.deepEqual(JSON.parse(fs.readFileSync(manifestFile, 'utf8')).allowed_origins, ['chrome-extension://' + storeId + '/']);
   console.log('PASS repair: doctor identifies invalid registration and setup restores it');
+
+  // Running processes must not conceal broken next-start dependencies.
+  fs.rmSync(opt);
+  const missingNode = JSON.parse(await cli(['doctor', '--json'], 1));
+  assert.equal(missingNode.host.extensionConnected, true);
+  assert.equal(missingNode.launch.ready, false);
+  assert(missingNode.launch.errors.some(line => line.includes('Node runtime')));
+  await assert.rejects(exec(manifest.path, ['stdio'], { env: launcherEnv, timeout: 5000 }), error => {
+    assert.equal(error.stdout, '');
+    assert.match(error.stderr, /Node runtime missing.*setup/);
+    return true;
+  });
+  // With no stable alias available, setup uses the new known runtime; clients stay unchanged.
+  await cli(['setup', '--clients', 'none', '--no-open', '--wait', '0']);
+  assert.equal(JSON.parse(fs.readFileSync(installationFile, 'utf8')).node, env.OPENCLI_SETUP_TEST_NODE);
+  assert.deepEqual(JSON.parse(fs.readFileSync(clientState, 'utf8')), entries);
+
+  // Exercise package relocation using a real entry symlink and the same installation writer.
+  const launchModule = new URL('../dist/src/host/launch.js', import.meta.url).href;
+  const stagedEntry = path.join(root, 'moved package.js');
+  fs.symlinkSync(entry, stagedEntry);
+  await exec(process.execPath, ['--import', preload, '--input-type=module', '-e',
+    `import { writeLauncher } from ${JSON.stringify(launchModule)}; writeLauncher(${JSON.stringify(stagedEntry)});`], { env });
+  const forwarded = await exec(manifest.path, ['stdio', '--help'], { env: launcherEnv, timeout: 5000 });
+  assert.match(forwarded.stdout, /Usage: opencli-mcp/);
+  fs.rmSync(stagedEntry);
+  const missingEntry = JSON.parse(await cli(['doctor', '--json'], 1));
+  assert.equal(missingEntry.host.extensionConnected, true);
+  assert(missingEntry.launch.errors.some(line => line.includes('Program entry')));
+  await assert.rejects(exec(manifest.path, ['stdio'], { env: launcherEnv, timeout: 5000 }), error => {
+    assert.equal(error.stdout, '');
+    assert.match(error.stderr, /Program entry missing.*setup/);
+    return true;
+  });
+  await cli(['setup', '--clients', 'none', '--no-open', '--wait', '0']);
+  assert.deepEqual(JSON.parse(fs.readFileSync(clientState, 'utf8')), entries);
+  const recovered = new Client({ name: 'setup-recovered', version: '0.0.0' });
+  mcp = recovered;
+  await recovered.connect(new StdioClientTransport({ command: manifest.path, args: ['stdio'], env: launcherEnv }));
+  assert((await recovered.listTools()).tools.some(tool => tool.name === 'js'));
+  await recovered.close();
+  mcp = null;
+  console.log('PASS startup health: live host cannot hide missing Node/package; setup repairs both without changing client commands');
+
+  // JSONC clients use the same canonical command while retaining unrelated settings.
+  const { registerOpenCode } = await import('../dist/src/host/opencode.js');
+  const { registerPi } = await import('../dist/src/host/pi.js');
+  const { parse } = await import('jsonc-parser');
+  const configHome = path.join(root, 'config');
+  const piHome = path.join(root, 'pi');
+  const openCodeFile = path.join(configHome, 'opencode', 'opencode.jsonc');
+  const piFile = path.join(piHome, 'mcp.json');
+  const command = { command: manifest.path, args: ['stdio'] };
+  fs.mkdirSync(path.dirname(openCodeFile), { recursive: true });
+  fs.mkdirSync(piHome);
+  for (const [file, section] of [[openCodeFile, 'mcp'], [piFile, 'mcpServers']]) {
+    fs.writeFileSync(file, `{// keep my settings\n"theme":"dark","${section}":{"other":{"command":"other"},"opencli-mcp":{"command":"stale"}}}`);
+  }
+  registerOpenCode(command, configHome);
+  registerPi(command, piHome);
+  for (const [file, section] of [[openCodeFile, 'mcp'], [piFile, 'mcpServers']]) {
+    const text = fs.readFileSync(file, 'utf8');
+    const config = parse(text);
+    assert(text.includes('// keep my settings'));
+    assert.equal(config.theme, 'dark');
+    assert.equal(config[section].other.command, 'other');
+    const own = config[section]['opencli-mcp'];
+    assert.deepEqual(section === 'mcp' ? own.command : [own.command, ...own.args], [manifest.path, 'stdio']);
+  }
+  assert.equal(registerOpenCode(command, configHome), 'existing');
+  assert.equal(registerPi(command, piHome), 'existing');
+  console.log('PASS JSONC clients: canonical launcher replaces stale entries and preserves unrelated settings');
 
   assert((await cli(['doctor'])).includes('Browser connection is ready.'));
   const help = await cli(['--help']);

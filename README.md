@@ -59,7 +59,7 @@ Restart or reconnect your MCP client, then ask:
 
 > Use opencli-mcp to read the top five Hacker News stories and summarize them with links.
 
-You can rerun `opencli-mcp setup` to repair the browser registration or select newly installed clients to configure. Existing MCP client settings are preserved. For a read-only connection check, run `opencli-mcp doctor`.
+You can rerun `opencli-mcp setup` to repair the browser registration or select newly installed clients to configure. Selected clients have their `opencli-mcp` entry updated to a stable launcher; other server entries are preserved. The launcher follows Homebrew upgrades within the same formula. If Node or the package moves, rerun setup. For a read-only startup and connection check, run `opencli-mcp doctor`.
 
 Connection issues? See [troubleshooting](docs/setup.md#troubleshooting).
 

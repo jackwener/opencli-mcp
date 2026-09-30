@@ -7,11 +7,11 @@ For the recommended npm + Chrome Web Store installation, follow the [README quic
 `npm install -g opencli-mcp` installs the software. `opencli-mcp setup` configures the two connections it needs:
 
 1. **Chrome → local program:** writes the Native Messaging registration so Chrome can start the program when the extension connects.
-2. **MCP client → local program:** asks you to select `claude`, `codex`, `opencode`, `pi`, or a combination when their CLIs are on your PATH. Only selected clients are configured, and existing registrations are kept. Pi requires `pi-mcp-adapter`. Choose `manual` (the default) for a ready-to-copy configuration using absolute paths, or `none` to configure only the browser connection.
+2. **MCP client → local program:** asks you to select `claude`, `codex`, `opencode`, `pi`, or a combination when their CLIs are on your PATH. Only selected clients are configured; their `opencli-mcp` entry is set to the managed launcher. Other server entries are unchanged. Pi requires `pi-mcp-adapter`. Choose `manual` (the default) for a ready-to-copy configuration using absolute paths, or `none` to configure only the browser connection.
 
 It then checks the live browser connection. If disconnected, it opens the Chrome Web Store and waits for the extension to connect. The extension retries automatically, so you can install it before or after running setup. Already connected? No store page is opened.
 
-`setup` never installs an extension silently. Add it through the Chrome Web Store or from the manual-install zip in GitHub Releases. It also does not overwrite existing MCP client settings. If an existing entry points at an old location, replace that entry with the configuration printed by setup.
+`setup` never installs an extension silently. Add it through the Chrome Web Store or from the manual-install zip in GitHub Releases. Rerunning setup updates the managed launcher. Selecting a client also replaces its `opencli-mcp` entry, so setup can repair an incorrect command.
 
 ### Setup options
 
@@ -35,27 +35,17 @@ A timeout leaves the configuration in place: enable the extension and rerun setu
 
 `opencli-mcp doctor` checks registration and the live connection without changing settings. It is for troubleshooting; it is not a required setup step.
 
-## Embedding the browser host in an app
+## Stable launch entrypoint
 
-Chrome starts a Native Messaging host from one executable path in its manifest. It does not pass arguments or a custom environment. `registerHost()` owns the manifest and the launcher. Call it when the app starts or updates, so the manifest follows the current app location:
+Both Chrome and MCP clients use `~/.opencli-mcp/bin/opencli-mcp-launcher` (`.cmd` on Windows). Chrome starts the launcher in host mode; MCP clients pass `stdio`. Paths and arguments are printed by setup, so desktop apps do not need your terminal's npm `PATH`.
 
-```js
-import { registerHost } from 'opencli-mcp/host-registration.js';
+Setup records the Node executable and package entry in `~/.opencli-mcp/installation.json` and generates the launcher from that record. Treat both as setup-managed files. Doctor checks the runtime, program entry, launcher, browser registration, and live connection separately. A running host does not hide missing files needed at the next start.
 
-registerHost();
-```
-
-For the normal npm installation, the default uses Node. When called from Electron, it uses the app binary with `ELECTRON_RUN_AS_NODE=1` set in the *new* process. If the app disables Electron's `runAsNode` fuse or ships a dedicated signed helper, provide its executable path:
-
-```js
-registerHost({ launch: { kind: 'executable', path: '/absolute/path/to/signed-helper' } });
-```
-
-The helper must implement the Native Messaging protocol on stdin/stdout and run the opencli-mcp `host` entrypoint. For another host runtime, pass `{ kind: 'command', command: '/absolute/path/to/runtime', args: ['/absolute/path/to/main.js', 'host'], env: { KEY: 'value' } }`. The library serializes that command into a launcher and writes the manifest for the selected browsers and profiles. An executable path must exist and be absolute.
+For Homebrew installations, setup uses the corresponding formula's stable `opt` path when it resolves to the current file. This applies to both Node and the package entry. Other installations use their current absolute paths. The launcher does not search version managers, download Node, or fetch an npm package on startup.
 
 ## OpenCode
 
-Run `opencli-mcp setup --clients opencode`. Setup adds a local MCP server to your global OpenCode config (`~/.config/opencode/opencode.json`, or `opencode.jsonc` if that is your existing file). It preserves comments, other settings, and any existing `opencli-mcp` entry. Restart OpenCode, then use `opencode mcp list` to check the connection. The executable and script paths are absolute, so OpenCode does not need your terminal's npm `PATH`.
+Run `opencli-mcp setup --clients opencode`. Setup adds a local MCP server to your global OpenCode config (`~/.config/opencode/opencode.json`, or `opencode.jsonc` if that is your existing file). It updates the `opencli-mcp` entry while preserving comments outside that entry and other settings. Restart OpenCode, then use `opencode mcp list` to check the connection. The launcher path is absolute, so OpenCode does not need your terminal's npm `PATH`.
 
 ## DeepSeek Harness (dsh)
 
@@ -66,7 +56,7 @@ opencli-mcp setup --clients none
 dsh plugin --profile web add opencli-mcp
 ```
 
-Restart `dsh web`. The main package's bundle inserts one `@deepseek-ai/dsh-mcp-client` entry, so dsh discovers the same MCP tools as other clients. The global `opencli-mcp` executable must be on dsh's `PATH`; set `OPENCLI_MCP_BIN` to its absolute path if dsh is launched from an app with a different `PATH`. To remove the dsh registration, run `dsh plugin --profile web remove opencli-mcp`. Replace `web` with your active dsh profile when needed.
+Restart `dsh web`. The main package's bundle inserts one `@deepseek-ai/dsh-mcp-client` entry using the launcher created by setup, so dsh discovers the same MCP tools without depending on npm's `PATH`. Set `OPENCLI_MCP_BIN` only if you need a different executable. To remove the dsh registration, run `dsh plugin --profile web remove opencli-mcp`. Replace `web` with your active dsh profile when needed.
 
 ## Pi
 
@@ -146,7 +136,11 @@ npm install -g opencli-mcp@latest
 opencli-mcp setup
 ```
 
-Setup refreshes the browser registration, including the Node.js path. After upgrading Node, rerun `opencli-mcp setup` using the new runtime; changing PATH alone does not update an existing browser host launcher. Chrome updates the store extension independently. If the old host is still running, disable and re-enable the extension to start the updated program. If your MCP client uses a path that has changed, replace its entry with the configuration printed by setup, then reconnect it.
+Homebrew upgrades within the same formula normally need no configuration change: the `opt` path follows the installed version. This assumes the package is still installed at its recorded location. Switching formulas (for example, `node@22` to `node@24`), switching version managers, moving the source checkout, or losing the global npm package requires installing the package under the chosen runtime and rerunning setup. Existing clients using the managed launcher keep the same command.
+
+When configuring a client for the first time with the managed launcher, select it explicitly, for example `opencli-mcp setup --clients claude,codex`. For other clients, copy the configuration printed by `--clients manual`.
+
+Chrome updates the store extension independently. If the old host is still running, disable and re-enable the extension to start the updated program, then reconnect the MCP client. Use `doctor` to check both the live connection and the files needed for the next startup.
 
 ## Remote clients
 
@@ -185,13 +179,14 @@ The same state directory contains the HTTP token, `run/host.json`, and user-defi
 
 ## Troubleshooting
 
-Run `opencli-mcp doctor` first. It reports whether the browser registration, local host, and extension are connected, with recovery steps for failures. Use `doctor --json` for machine-readable diagnostics.
+Run `opencli-mcp doctor` first. It reports startup dependencies, browser registration, and whether the local host and extension are connected, with recovery steps for failures. Use `doctor --json` for machine-readable diagnostics.
 
 | Symptom | What to check |
 |---|---|
 | `browser_unavailable` or host unreachable | Keep Chrome running, enable the extension, and verify the host registration |
 | Web Store extension cannot connect | Run `opencli-mcp setup`; if it stays disconnected, disable and re-enable the extension |
 | No host manifest was written | Rerun `setup`; for custom profiles, pass `--user-data-dir` |
+| Node runtime or program entry missing | Install Node/package as needed, then run `opencli-mcp setup`; select clients if their commands also need repair |
 | MCP client cannot find `opencli-mcp` | Use the absolute executable path in the client configuration |
 | Development changes do not appear | Rebuild the extension and click **Reload** on the extensions page |
 

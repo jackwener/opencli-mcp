@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { addMcpEntry } from './jsonc-config.js';
+import { setMcpEntry } from './jsonc-config.js';
 
 type StdioCommand = { command: string; args: string[] };
 
@@ -11,6 +11,6 @@ export function registerOpenCode(command: StdioCommand, configHome = process.env
   const json = path.join(dir, 'opencode.json');
   const jsonc = path.join(dir, 'opencode.jsonc');
   const file = fs.existsSync(json) ? json : fs.existsSync(jsonc) ? jsonc : json;
-  const entry = { type: 'local', command: [command.command, ...command.args, 'stdio'], enabled: true };
-  return addMcpEntry(file, 'mcp', 'opencli-mcp', entry);
+  const entry = { type: 'local', command: [command.command, ...command.args], enabled: true };
+  return setMcpEntry(file, 'mcp', 'opencli-mcp', entry);
 }

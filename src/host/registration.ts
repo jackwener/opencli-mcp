@@ -5,7 +5,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { NATIVE_HOST_NAME } from '../protocol.js';
-import { OPENCLI_MCP_DIR } from './state.js';
+import { writeLauncher } from './launch.js';
 import { EXTENSION_ID } from './extension.js';
 
 export function projectRoot(): string {
@@ -71,28 +71,11 @@ export function runningProfileDirs(): string[] {
   } catch { return []; }
 }
 
-export function writeLauncher(): string {
-  const bin = path.join(OPENCLI_MCP_DIR, 'bin');
-  fs.mkdirSync(bin, { recursive: true });
-  const main = path.join(projectRoot(), 'dist', 'src', 'main.js');
-  if (!fs.existsSync(main)) throw new Error('dist/src/main.js not found — run `npm run build` before `opencli-mcp setup`');
-  const entry = main;
-  if (process.platform === 'win32') {
-    const file = path.join(bin, 'opencli-mcp-host.cmd');
-    fs.writeFileSync(file, `@echo off\r\n"${process.execPath}" "${entry}" host\r\n`);
-    return file;
-  }
-  const file = path.join(bin, 'opencli-mcp-host');
-  fs.writeFileSync(file, `#!/bin/sh\nexec "${process.execPath}" "${entry}" host\n`, { mode: 0o755 });
-  fs.chmodSync(file, 0o755);
-  return file;
-}
-
 export function registerHost(opts: { browsers?: string[]; userDataDirs?: string[] } = {}): { launcher: string; manifests: Array<{ browser: string; file: string; written: boolean }> } {
   const supported = nativeHostDirs();
   const unknown = opts.browsers?.filter((browser) => !supported.some((target) => target.browser === browser));
   if (unknown?.length) throw new Error(`Unknown browser(s): ${unknown.join(', ')}. Supported: ${supported.map((target) => target.browser).join(', ')}.`);
-  const launcher = writeLauncher();
+  const launcher = writeLauncher(path.join(projectRoot(), 'dist', 'src', 'main.js'));
   const manifest = { name: NATIVE_HOST_NAME, description: 'opencli-mcp browser runtime host', path: launcher, type: 'stdio', allowed_origins: [`chrome-extension://${EXTENSION_ID}/`] };
   const manifests: Array<{ browser: string; file: string; written: boolean }> = [];
   // Chrome resolves user-level hosts relative to its user data dir: custom --user-data-dir profiles get their own copy

@@ -86,10 +86,11 @@ async function main(): Promise<void> {
       const r = await doctor();
       if (has('--json')) process.stdout.write(`${JSON.stringify(r, null, 2)}\n`);
       else {
-        const registered = r.manifests.some((m) => m.present && m.launcherExists && m.authorized);
+        const registered = r.manifests.some((m) => m.present && m.launcherExists && m.launcherMatches && m.authorized);
         process.stdout.write([
           r.ok ? 'Browser connection is ready.' : 'Browser connection needs attention.',
           `  Browser registration: ${registered ? 'ready' : 'missing or invalid'}`,
+          `  Next startup: ${r.launch.ready ? 'ready' : 'needs repair'}`,
           `  Local host: ${r.host.running ? 'running' : 'not connected'}`,
           `  Chrome extension: ${r.host.extensionConnected ? 'connected' : 'not connected'}`,
           ...r.advice.map((line) => `  ${line}`),
