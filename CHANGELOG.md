@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.28 — 2026-10-08
+
+- fix: keep action targets out of page DOM and disable cursor by default
+
 ## 0.0.27 — 2026-09-30
 
 - feat: add Gmail API write adapters
