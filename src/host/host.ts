@@ -19,7 +19,7 @@ export async function runNativeHost(opts: { version: string }): Promise<void> {
   const channel = new NativeChannel(process.stdin, frames);
   const bridge = new ExtensionBridge(channel);
   const config = readConfig();
-  const rt = new Runtime({ bridge, cursor: config.cursor ?? true, sites: config.sites, sitesWrite: config.sitesWrite, log });
+  const rt = new Runtime({ bridge, cursor: config.cursor ?? false, sites: config.sites, sitesWrite: config.sitesWrite, log });
   await rt.init();
   const token = loadOrCreateToken();
   let http;

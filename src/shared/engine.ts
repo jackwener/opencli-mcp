@@ -8,7 +8,7 @@
 import { ELEMENT_REF } from './element-ref.js';
 import type { ActSpec, ActResult, ActTarget, FrameStep } from '../protocol.js';
 import { ENGINE_GLOBAL, PAGE_GLOBAL, type ResolveOutcome, type Resolved, type PointInfo, type SelectResult } from './page-contract.js';
-export { ENGINE_GLOBAL, PAGE_GLOBAL, ACT_MARK } from './page-contract.js';
+export { ENGINE_GLOBAL, PAGE_GLOBAL } from './page-contract.js';
 
 /** Evaluate once per world: installs Playwright's InjectedScript as globalThis.__opencliInjected, then the page module. */
 export function installEngineJs(injectedSource: string, pageModuleSource: string): string {
@@ -116,6 +116,8 @@ export interface ActIO {
   /** Call `globalThis.__opencliPage.<fn>(args)` in the world the action targets. */
   call(fn: string, args?: unknown, timeoutMs?: number): Promise<unknown>;
   cdp(method: string, params?: Record<string, unknown>): Promise<unknown>;
+  /** Set files on the remembered Element in its owning isolated world/session. */
+  setFiles?(files: string[]): Promise<void>;
   cursor?(x: number, y: number): Promise<unknown>;
   /** Resolve after a navigation the action triggered has finished (or when none started within classifyMs). */
   waitForNavigation?(classifyMs: number, timeoutMs: number): Promise<{ navigated: boolean; url?: string }>;
@@ -164,6 +166,11 @@ async function resolve(io: ActIO, spec: ActSpec, target: ActTarget, timeoutMs: n
 }
 
 export async function performAct(io: ActIO, spec: ActSpec): Promise<ActResult> {
+  try { return await performAction(io, spec); }
+  finally { await io.call('clearActionTarget', undefined, 1000).catch(() => {}); }
+}
+
+async function performAction(io: ActIO, spec: ActSpec): Promise<ActResult> {
   if (spec.method === 'dom') return performDomClick(io, spec);
   if (spec.method !== undefined && spec.method !== 'cdp') throw new ActError('invalid_args', `method "${spec.method}" is not a click method.`, 'method is "cdp" (default) or "dom".');
   if (spec.kind === 'upload') return performUpload(io, spec);
@@ -277,7 +284,6 @@ export async function performAct(io: ActIO, spec: ActSpec): Promise<ActResult> {
   if (settleMs > 0 && !(base as { navigated?: boolean }).navigated) { try { await io.call('settle', { maxMs: settleMs, quietMs: Math.min(200, settleMs) }, settleMs + 1500); } catch { /* navigation in flight */ } }
   const settled = Date.now();
   Object.assign(base, { elapsedMs: settled - started, timings: { resolveMs: base.waitedMs, actionMs: actionDone - started - base.waitedMs, settleMs: settled - actionDone } });
-  try { await io.call('clearActMark', undefined, 1000); } catch { /* page changed */ }
   return base;
 }
 
@@ -290,13 +296,10 @@ async function performUpload(io: ActIO, spec: ActSpec): Promise<ActResult> {
   const started = Date.now();
   const resolved = await io.call('resolveUpload', { selector, fallback: fallbackSelector(spec.target), files: files.length }) as import('./page-contract.js').UploadTarget | import('./page-contract.js').ResolveFail;
   if (!('ok' in resolved)) throw new ActError(resolved.error.code, resolved.error.message, resolved.error.hint, resolved.error.candidates ? { candidates: resolved.error.candidates } : undefined);
-  try {
-    const doc = await io.cdp('DOM.getDocument', { depth: 0 }) as { root: { nodeId: number } };
-    const q = await io.cdp('DOM.querySelector', { nodeId: doc.root.nodeId, selector: '[data-opencli-act]' }) as { nodeId: number };
-    await io.cdp('DOM.setFileInputFiles', { files, nodeId: q.nodeId });
-    const count = await io.call('fileSelectionCount') as number;
-    return { ok: true, kind: 'upload', ref: resolved.ref, matches_n: resolved.matches_n, visible_n: 0, match_level: 'exact', point: { x: 0, y: 0 }, method: 'cdp', hit: 'target', tag: 'input', waitedMs: Date.now() - started, selector: resolved.selector ?? undefined, files: count, verified: count === files.length };
-  } finally { await io.call('clearActMark').catch(() => {}); }
+  if (!io.setFiles) throw new ActError('unsupported', 'This runtime cannot upload files');
+  await io.setFiles(files);
+  const count = await io.call('fileSelectionCount') as number;
+  return { ok: true, kind: 'upload', ref: resolved.ref, matches_n: resolved.matches_n, visible_n: 0, match_level: 'exact', point: { x: 0, y: 0 }, method: 'cdp', hit: 'target', tag: 'input', waitedMs: Date.now() - started, selector: resolved.selector ?? undefined, files: count, verified: count === files.length };
 }
 
 /** Explicit DOM activation. No mouse event is sent, so this cannot be a second click after a delivered one unless the caller asks again. */
@@ -319,6 +322,5 @@ async function performDomClick(io: ActIO, spec: ActSpec): Promise<ActResult> {
   const actionDone = Date.now();
   if (settleMs > 0 && !base.navigated) { try { await io.call('settle', { maxMs: settleMs, quietMs: Math.min(200, settleMs) }, settleMs + 1500); } catch { /* navigation in flight */ } }
   Object.assign(base, { elapsedMs: Date.now() - started, timings: { resolveMs: base.waitedMs, actionMs: actionDone - started - base.waitedMs, settleMs: Date.now() - actionDone } });
-  try { await io.call('clearActMark', undefined, 1000); } catch { /* page changed */ }
   return base;
 }

@@ -79,7 +79,7 @@ export class Runtime extends EventEmitter<RuntimeEvents> implements PageProvider
   constructor(opts: RuntimeOptions = {}) {
     super();
     this.bridge = opts.bridge ?? null;
-    this.cursorEnabled = opts.cursor ?? true;
+    this.cursorEnabled = opts.cursor ?? false;
     this.configSites = opts.sites ?? [];
     this.configSitesWrite = opts.sitesWrite ?? [];
     if (opts.log) this.on('log', opts.log);

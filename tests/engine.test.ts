@@ -28,6 +28,7 @@ describe('click delivery', () => {
     await expect(performAct(io, { kind: 'click', target: { ref: 'e1' }, settleMs: 0 })).rejects.toMatchObject({ code: 'not_delivered' });
     expect(calls.filter((c) => c === 'domClick')).toEqual([]);
     expect(calls).toContain('armClickProbe');
+    expect(calls.at(-1)).toBe('clearActionTarget');
     expect(calls).toContain('Input.dispatchMouseEvent:mousePressed');
   });
 });

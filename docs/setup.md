@@ -162,7 +162,7 @@ Settings live in `~/.opencli-mcp/config.json`. For example:
 ```json
 {
   "port": 19991,
-  "cursor": true,
+  "cursor": false,
   "sites": ["twitter", "reddit"],
   "sitesWrite": []
 }
@@ -171,9 +171,11 @@ Settings live in `~/.opencli-mcp/config.json`. For example:
 | Setting | Effect |
 |---|---|
 | `port` | Local HTTP port; default `19991` |
-| `cursor` | Show the agent cursor overlay |
+| `cursor` | Show the agent cursor overlay (default: `false`; enabling it inserts a visible DOM overlay) |
 | `sites` | Site commands to enable at startup, read-only |
 | `sitesWrite` | Sites whose write commands should also be enabled |
+
+Element refs and action targets are kept in the extension's isolated world, without DOM marker attributes. Screenshot annotations are also opt-in (`annotate: true`) and temporarily insert DOM overlays during capture. Leave cursor and annotations disabled when DOM overlays are unwanted.
 
 The same state directory contains the HTTP token, `run/host.json`, and user-defined adapters under `adapters/<site>/<name>.js`.
 

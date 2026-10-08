@@ -94,6 +94,30 @@ try {
   };
   assert.equal((await js(`let tab = await browser.tabs.get(${JSON.stringify(String(tabId))}); await tab.observe({includeFrames:false});`)).ok, true);
 
+  // Page-owned MutationObservers must not see automation marker writes, even transient ones.
+  const uploadFile = join(directory, 'upload.txt');
+  await writeFile(uploadFile, 'marker-free upload');
+  for (const frame of page.frames()) {
+    await frame.evaluate(() => {
+      const input = document.createElement('input'); input.type = 'file'; input.id = 'upload'; input.hidden = true;
+      document.body.append(input);
+      const shadow = document.querySelector('#shadow')?.shadowRoot;
+      if (shadow) { const clone = input.cloneNode(); clone.id = 'shadow-upload'; shadow.append(clone); }
+      window.markerMutations = [];
+      const observer = new MutationObserver(records => {
+        for (const record of records) {
+          if (record.type === 'attributes') window.markerMutations.push(record.attributeName);
+          if (record.type === 'childList') for (const node of record.addedNodes) {
+            if (node.nodeType === 1) window.markerMutations.push('added:' + node.nodeName);
+          }
+        }
+      });
+      observer.observe(document.documentElement, {subtree:true, attributes:true, childList:true});
+      if (shadow) observer.observe(shadow, {subtree:true, attributes:true, childList:true});
+    });
+  }
+  assert.equal(rt.cursorEnabled, false);
+
   const observed = await tab.observe();
   assert(observed.state.includes('END-OF-DETAIL'), 'ARIA must not irreversibly clip long names');
   assert(observed.state.includes('&end=complete'), 'ARIA must retain full URLs');
@@ -104,6 +128,22 @@ try {
   assert(observed.frames.some(frame => frame.owner.id === 'shadow-frame'), 'Frame owners in shadow roots must route');
   assert.equal(await page.evaluate(() => scrollY), 0, 'Observation must not scroll to offscreen frames');
   assert((await worker.evaluate(tabId => globalThis.testFrames(tabId), tabId)).some(f => f.oopif), 'Fixture must exercise a real OOPIF');
+  for (const target of [
+    {selector:'#upload'}, {selector:'#shadow-upload'},
+    {selector:'#upload', frame:child.frame}, {selector:'#upload', frame:nested.frame},
+  ]) {
+    const result = await tab.act({action:'upload', target, files:[uploadFile], settleMs:0});
+    assert.equal(result.controlState, 'verified', JSON.stringify(result));
+    assert.equal(result.files, 1);
+  }
+  await tab.act({action:'fill', target:{selector:'input[placeholder="Shadow field"]'}, value:'edited shadow value', settleMs:0});
+  assert.equal(await page.evaluate(() => document.querySelector('#shadow').shadowRoot.querySelector('input').value), 'edited shadow value');
+  await tab.act({action:'fill', target:{selector:'input[placeholder="Shadow field"]'}, value:'shadow-live', settleMs:0});
+  await tab.act({action:'click', target:{selector:'button[title]'}, settleMs:0});
+  for (const frame of page.frames()) {
+    assert.deepEqual(await frame.evaluate(() => window.markerMutations), [], 'Actions/observe must not add DOM nodes or attributes');
+  }
+  console.log('Passed: marker-free observation, click, shadow fill, uploads in main/shadow/OOPIF/nested frames.');
   console.log('Passed: full ARIA, same-origin/cross-origin/nested/shadow iframe observations, no observation scroll.');
 
   const dom = await tab.observe({ format: 'dom', includeFrames: false });

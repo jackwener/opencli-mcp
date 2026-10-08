@@ -2,7 +2,8 @@
 import type { ActSpec, ActResult } from '../../src/protocol.js';
 import { performAct as run, ActError, frameSteps } from '../../src/shared/engine';
 import * as executor from './cdp';
-import { callPage, frameCommand } from './world';
+import { callPage, frameCommand, evaluateInWorld } from './world';
+import { PAGE_GLOBAL } from '../../src/shared/page-contract';
 import { routeFrames } from './frames';
 
 export { ActError };
@@ -25,6 +26,17 @@ export function waitForNavigation(tabId: number, classifyMs: number, timeoutMs: 
   });
 }
 
+/** Pass the actual Element handle to CDP, including shadow roots and child frame sessions. */
+async function setFiles(tabId: number, frameId: string | null, files: string[], aggressive: boolean): Promise<void> {
+  const objectId = await evaluateInWorld(tabId, frameId, `globalThis.${PAGE_GLOBAL}.actionTarget()`, aggressive, undefined, false);
+  if (typeof objectId !== 'string') throw new ActError('stale_ref', 'Upload target is no longer connected');
+  try {
+    await frameCommand(tabId, frameId, 'DOM.setFileInputFiles', { files, objectId }, aggressive);
+  } finally {
+    await frameCommand(tabId, frameId, 'Runtime.releaseObject', { objectId }, aggressive).catch(() => {});
+  }
+}
+
 export async function performAct(tabId: number, spec: ActSpec, opts: { aggressive: boolean; cursor?: (x: number, y: number) => Promise<unknown> }): Promise<ActResult> {
   await executor.ensureAttached(tabId, opts.aggressive);
   const route = typeof spec.target.x === 'number' ? null : await routeFrames(tabId, frameSteps(spec.target.frame), opts.aggressive, true);
@@ -44,6 +56,7 @@ export async function performAct(tabId: number, spec: ActSpec, opts: { aggressiv
       },
       // DOM.* must address the frame's own session (node ids are per session); Input.* is dispatched on the tab and routed by Chrome
       cdp: (method, params) => method.startsWith('DOM.') ? frameCommand(tabId, route.frameId, method, params ?? {}, opts.aggressive) : executor.sendDebuggerCommand({ tabId }, method, params),
+      setFiles: files => setFiles(tabId, route.frameId, files, opts.aggressive),
       cursor: opts.cursor,
       waitForNavigation: (classifyMs, timeoutMs) => waitForNavigation(tabId, classifyMs, timeoutMs),
       pointOffset: route.offset,
@@ -52,6 +65,7 @@ export async function performAct(tabId: number, spec: ActSpec, opts: { aggressiv
   return run({
     call: (fn, args, timeoutMs) => callPage(tabId, null, fn, args, opts.aggressive, timeoutMs),
     cdp: (method, params) => executor.sendDebuggerCommand({ tabId }, method, params),
+    setFiles: files => setFiles(tabId, null, files, opts.aggressive),
     cursor: opts.cursor,
     waitForNavigation: (classifyMs, timeoutMs) => waitForNavigation(tabId, classifyMs, timeoutMs),
   }, spec);

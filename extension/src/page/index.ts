@@ -5,7 +5,7 @@
  * file is type-checked with the extension and exercised by the browser smoke test.
  */
 import {
-  ACT_MARK, ENGINE_GLOBAL, PAGE_GLOBAL,
+  ENGINE_GLOBAL, PAGE_GLOBAL,
   type ResolveArgs, type ResolveOutcome, type ResolveFail, type Candidate, type FindArgs, type FindResult, type FindEntry, type QueryFindResult, type UploadTarget,
   type AriaArgs, type PointInfo, type FrameProbeResult, type SettleArgs, type SelectResult, type ElementAtResult, type Box, type Expectation, type CheckResult,
   type ReadTextArgs, type ReadTextResult, type DomClickArgs, type DomClickResult, type DomSnapshot, type ObserveFrameArgs, type FrameObservation, type ElementDetails,
@@ -114,13 +114,19 @@ export function ariaRefOf(el: Element): string | null { return stableRefOf(el); 
 
 const candidate = (el: Element): Candidate => ({ tag: el.tagName.toLowerCase(), role: el.getAttribute('role') || '', text: text(el).slice(0, 80), ref: ariaRefOf(el), visible: is(el, 'visible'), box: box(el) });
 
-const actEl = (): Element | null => document.querySelector(`[${ACT_MARK}]`);
-function markAct(el: Element): void { document.querySelectorAll(`[${ACT_MARK}]`).forEach((n) => n.removeAttribute(ACT_MARK)); el.setAttribute(ACT_MARK, '1'); }
-export function clearActMark(): void { document.querySelectorAll(`[${ACT_MARK}]`).forEach((n) => n.removeAttribute(ACT_MARK)); }
+// Action state belongs to this isolated world, never to shared DOM attributes.
+let actionElement: Element | null = null;
+export function actionTarget(): Element | null {
+  const el = actionElement;
+  return el?.isConnected && el.ownerDocument === document ? el : null;
+}
+const actEl = actionTarget;
+function rememberActionTarget(el: Element): void { actionElement = el; }
+export function clearActionTarget(): void { actionElement = null; }
 
 const ALIGN_BLOCKS = new Set(['start', 'center', 'end', 'nearest']);
 
-/** Locate → strict/unique-visible → states → scroll → wall-clock stable box → hit-test → mark. */
+/** Locate → strict/unique-visible → states → scroll → wall-clock stable box → hit-test → remember target. */
 export async function resolve(args: ResolveArgs): Promise<ResolveOutcome> {
   const { selector, fallback, strict, states, align } = args;
   let usedSelector = selector;
@@ -156,7 +162,7 @@ export async function resolve(args: ResolveArgs): Promise<ResolveOutcome> {
   const type = (el as HTMLInputElement).type;
   const checkable = (tag === 'input' && (type === 'checkbox' || type === 'radio')) || ['checkbox', 'radio', 'switch'].includes(el.getAttribute('role') || '');
   const hit = injected().expectHitTarget({ x, y }, el);
-  markAct(el);
+  rememberActionTarget(el);
   return {
     ok: true, x, y, matches_n: matches.length, tag,
     hit: hit === 'done' ? 'target' : 'other',
@@ -166,17 +172,17 @@ export async function resolve(args: ResolveArgs): Promise<ResolveOutcome> {
   };
 }
 
-/** Mark the element under a viewport point for a point-targeted action. */
+/** Remember the element under a viewport point for a point-targeted action. */
 export function pointInfo(args: { x: number; y: number }): PointInfo | null {
   const el = document.elementFromPoint(args.x, args.y);
   if (!el) return null;
-  markAct(el);
+  rememberActionTarget(el);
   const tag = el.tagName.toLowerCase();
   const editable = Boolean((el as HTMLElement).isContentEditable || ((tag === 'input' || tag === 'textarea') && !(el as HTMLInputElement).readOnly && !(el as HTMLInputElement).disabled));
   return { tag, editable, isSelect: tag === 'select' };
 }
 
-// ── actions on the marked element ──
+// ── actions on the remembered element ──
 const target = (): Element => { const el = actEl(); if (!el) throw new Error('error:notconnected'); return el; };
 const retarget = (el: Element): Element => (injected().retarget(el, 'follow-label') as Element | null) || el;
 
@@ -224,7 +230,7 @@ export function caretToEnd(): void {
   const el = document.activeElement as HTMLInputElement | null;
   if (el && !(el as HTMLElement).isContentEditable && typeof el.setSelectionRange === 'function') { try { const n = el.value.length; el.setSelectionRange(n, n); } catch { /* not a text control */ } }
 }
-/** Re-mark the file input associated with the target (inside it, its label's control, or the nearest form). */
+/** Remember the file input associated with the target (inside it, its label's control, or the nearest form). */
 export function resolveUpload(args: { selector: string; fallback: string | null; files: number }): UploadTarget | ResolveFail {
   let matches = query(args.selector);
   if (!matches.length && args.fallback) matches = query(args.fallback);
@@ -241,7 +247,7 @@ export function resolveUpload(args: { selector: string; fallback: string | null;
   const input = candidates[0];
   if (input.disabled) return { error: { code: 'not_enabled', message: 'The file input is disabled.' } };
   if (args.files > 1 && !input.multiple) return { error: { code: 'invalid_args', message: 'This file input accepts only one file.' } };
-  markAct(input);
+  rememberActionTarget(input);
   return { ok: true, ref: ariaRefOf(input), selector: replaySelector(input), matches_n: 1 };
 }
 export function fileSelectionCount(): number { const el = actEl(); return el instanceof HTMLInputElement ? el.files?.length ?? 0 : 0; }
@@ -312,7 +318,7 @@ export function domClick(args: DomClickArgs): DomClickResult {
   }
   const enabled = stateOf(el, 'enabled');
   if (!enabled.matches) return { error: { code: 'not_enabled', message: `element is not enabled${enabled.received.startsWith('error:') ? ` (${enabled.received.slice(6)})` : ''}`, candidates: [candidate(el)] }, retry: true };
-  markAct(el);
+  rememberActionTarget(el);
   (el as HTMLElement).click();
   const b = el.getBoundingClientRect();
   return { ok: true, ref: ariaRefOf(el), tag: el.tagName.toLowerCase(), selector: replaySelector(el), x: b.width > 0 ? b.left + b.width / 2 : 0, y: b.height > 0 ? b.top + b.height / 2 : 0 };
@@ -720,7 +726,7 @@ export function check(args: Expectation): CheckResult {
   return { ok: failed.length === 0, failed, url: location.href, title: document.title };
 }
 
-export const api = { check, resolve, resolveUpload, fileSelectionCount, pointInfo, focus, readValue, fill, nativeSet, isChecked, select, caretToEnd, clearActMark, settle, frameProbe, frameElement, clearFrameProbe, aria, observeFrame, visibleDom, readElement, find, findByQuery, elementAt, annotate, unannotate, armClickProbe, readClickProbe, domClick, readText };
+export const api = { check, resolve, resolveUpload, fileSelectionCount, pointInfo, focus, readValue, fill, nativeSet, isChecked, select, caretToEnd, actionTarget, clearActionTarget, settle, frameProbe, frameElement, clearFrameProbe, aria, observeFrame, visibleDom, readElement, find, findByQuery, elementAt, annotate, unannotate, armClickProbe, readClickProbe, domClick, readText };
 export type PageApi = typeof api;
 
 (globalThis as any)[PAGE_GLOBAL] = api;

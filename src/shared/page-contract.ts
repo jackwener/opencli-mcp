@@ -5,8 +5,6 @@
  */
 export const ENGINE_GLOBAL = '__opencliInjected';
 export const PAGE_GLOBAL = '__opencliPage';
-/** Attribute the resolver sets on the element an action is about to touch. */
-export const ACT_MARK = 'data-opencli-act';
 
 export interface ResolveArgs {
   selector: string;

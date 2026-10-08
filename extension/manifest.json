@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "opencli-mcp",
-  "version": "0.0.19",
+  "version": "0.0.20",
   "description": "Browser runtime for opencli-mcp: drives your logged-in Chrome for MCP agents via a Chrome-spawned native host.",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA1DKzfAqudbl9AylDyPDJtv4/Uf0DsfYtNmkB42Drff0IJVZ0pRGznikRyz3gNpSSairFyg50pWtuh0EKM/QsU1VrTlHycY529ho8+xMLFO64w3OolId18F73YQ4wRFEo3ESTYLLKVPRrK23dewElkVqtl0u3a63tm6YFkxUxzlS3l6xLMFoSId135BNdVLqHUZe9s/SGE0nD44sDMoNmkJk3qw+oUg65LH+69uc80PtSsXz9uiU6Ma77t2UG42Szvm5HfEDlWfX0NMM042emU8gZ3Id77DKe4195LZs/uEolqwyL12WsUkXcXyhCF7iQ09H/Ye8I6D6SqiEklX1S8QIDAQAB",
   "permissions": [
