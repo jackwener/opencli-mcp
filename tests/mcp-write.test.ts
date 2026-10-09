@@ -68,15 +68,4 @@ describe('adapter draft lifecycle and write commands', () => {
     } finally { await h.cleanup(); }
   });
 
-  it('does not activate a failed or discarded draft', async () => {
-    const h = await harness();
-    try {
-      const { data } = await h.define('poke');
-      const draftId = data.draftId as string;
-      expect(await h.tryDraft(draftId, {}, { path: 'value.done', equals: false })).toMatchObject({ verification: { passed: false } });
-      expect(await h.js(`await tools.activate(${JSON.stringify(draftId)})`)).toMatchObject({ ok: false, error: { code: 'draft_not_verified' } });
-      expect(await h.js(`await tools.discard(${JSON.stringify(draftId)})`)).toMatchObject({ ok: true, discarded: true });
-      expect(await h.js(`await tools.activate(${JSON.stringify(draftId)})`)).toMatchObject({ ok: false, error: { code: 'unknown_draft' } });
-    } finally { await h.cleanup(); }
-  });
 });

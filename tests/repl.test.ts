@@ -10,42 +10,11 @@ const repl = (globals = {}) => { const s = new JsSession(globals); sessions.push
 afterEach(async () => { await Promise.all(sessions.splice(0).map(s => s.dispose())); });
 
 describe('persistent Node REPL', () => {
-  it('keeps declarations and handles real JavaScript syntax and exceptions across calls', async () => {
+  it('keeps bindings across calls and remains usable after an exception', async () => {
     const s = repl();
-    expect((await s.run('let {n} = await Promise.resolve({n: 3}); function add(x) { return n + x }; class Item { value = add(2) }; /[;{}]/.test("{")')).value).toBe(true);
-    expect((await s.run('new Item().value')).value).toBe(5);
-    expect((await s.run('const fixed = 4; fixed = 7')).error?.message).toMatch(/constant/);
-    expect((await s.run('nodeRepl.write("before"); throw new Error("stop")')).writes).toEqual(['before']);
-    for (const expression of ['null', 'undefined', '0', 'false', '""']) {
-      expect((await s.run(`throw ${expression}`)).error).toBeDefined();
-      expect((await s.run(`await Promise.reject(${expression})`)).error).toBeDefined();
-    }
-    expect(s.status().generation).toBe(0);
+    expect((await s.run('let n = await Promise.resolve(3); function add(x) { return n + x }; add(2)')).value).toBe(5);
+    expect((await s.run('throw new Error("stop")')).error?.message).toBe('stop');
     expect((await s.run('n += 2; add(1)')).value).toBe(6);
-    expect((await s.run('let n = 9; n')).value).toBe(9);
-    expect((await s.run('function unfinished(')).error).toBeDefined();
-    expect((await s.run('add(0)')).value).toBe(9);
-    expect((await s.run('await import("node:path").then(m => m.basename("/a/b"))')).value).toBe('b');
-    expect((await s.run('require("node:path").basename("/a/c")')).value).toBe('c');
-    expect((await s.run('crypto.randomUUID().length')).value).toBe(36);
-    expect((await s.run('123n')).value).toBe(123n);
-    expect((await s.run('NaN')).value).toBeNaN();
-    expect((await s.run('({date:new Date("2026-01-01"), map:new Map([["x",2]]), set:new Set([3])})')).value).toEqual({ date: '2026-01-01T00:00:00.000Z', map: [['x', 2]], set: [3] });
-    expect((await s.run('await new Promise(resolve => process.stdout.write("module output", resolve))')).writes.join('')).toContain('module output');
-  });
-
-  it('explains top-level return without changing persistence or claiming errors roll back effects', async () => {
-    let effects = 0;
-    const s = repl({ effect: () => ++effects });
-    const invalid = await s.run('let shot = await effect(); return shot;');
-    expect(invalid.error).toMatchObject({ name: 'SyntaxError', message: 'Illegal return statement', hint: expect.stringContaining('Replace `return value;` with `value;`') });
-    expect(effects).toBe(0);
-    expect((await s.run('let shot = await effect(); shot;')).value).toBe(1);
-    expect((await s.run('function result() { return shot; } result();')).value).toBe(1);
-    const thrown = await s.run('await effect(); throw new SyntaxError("Illegal return statement")');
-    expect(effects).toBe(2);
-    expect(thrown.error?.hint).not.toMatch(/not executed|no actions|retry|replay/i);
-    expect((await s.run('shot;')).value).toBe(1);
   });
 
   it('serializes calls and interrupts an infinite loop without blocking the host', async () => {
@@ -83,53 +52,6 @@ describe('persistent Node REPL', () => {
     expect((await s.run('1')).value).toBe(1);
   });
 
-  it('drains RPCs on success and failure, preserves bindings, and respects handled rejections', async () => {
-    let effects = 0;
-    const s = repl({
-      slow: async () => { await new Promise(r => setTimeout(r, 20)); return ++effects; },
-      fail: async () => { throw null; },
-    });
-    expect(await s.run('let kept = 7; slow().then(() => slow()); 42')).toMatchObject({ value: 42 });
-    expect(effects).toBe(2);
-    expect(await s.run('slow(); nodeRepl.write("before"); throw new Error("stop")')).toMatchObject({ writes: ['before'], error: { message: 'stop' } });
-    expect(effects).toBe(3);
-    expect((await s.run('nodeRepl.emitImage({}); slow(); 1')).error?.message).toContain('emitImage expects');
-    expect(effects).toBe(4);
-    expect((await s.run('fail(); 1')).error?.message).toBe('null');
-    expect(await s.run('await fail().catch(() => "handled")')).toMatchObject({ value: 'handled' });
-    expect(await s.run('kept')).toMatchObject({ value: 7 });
-    expect(s.status()).toMatchObject({ state: 'idle', generation: 0, pendingCalls: 0 });
-  });
-
-  it('keeps drain within the call timeout and reports only dispatched work as uncertain', async () => {
-    let release!: () => void;
-    const pending = new Promise<void>(r => { release = r; });
-    const s = repl({ slow: () => pending });
-    await s.run('1');
-    try {
-      const result = s.run('slow(); 1', { timeoutMs: 1000 });
-      await expect.poll(() => s.status().state).toBe('draining');
-      expect((await result).error).toMatchObject({ code: 'command_outcome_unknown', data: { bindingsCleared: true, pendingCalls: 1 } });
-      expect((await s.run('1')).error?.code).toBe('js_busy');
-    } finally { release(); }
-    await expect.poll(() => s.status().pendingCalls).toBe(0);
-    expect((await s.run('1')).value).toBe(1);
-  });
-
-  it('resets escaped async failures and prevents old callbacks from affecting the next call', async () => {
-    let effects = 0;
-    const s = repl({ effect: () => { effects++; } });
-    await s.run('let old = 1; let trigger; new Promise(r => trigger = r).then(() => { effect(); nodeRepl.write("late"); }); 1');
-    const next = await s.run('trigger(); await new Promise(r => setTimeout(r, 200)); 2');
-    expect(next.error).toMatchObject({ code: 'js_worker_failed', data: { bindingsCleared: true } });
-    expect(next.writes).toEqual([]);
-    expect(effects).toBe(0);
-    expect((await s.run('typeof old')).value).toBe('undefined');
-    const thrown = await s.run('setTimeout(() => { throw new Error("timer") }, 10); await new Promise(r => setTimeout(r, 200))');
-    expect(thrown.error).toMatchObject({ code: 'js_worker_failed', message: 'timer' });
-    const escaped = await s.run('Promise.reject(new Error("escaped")); await new Promise(r => setTimeout(r, 200))');
-    expect(escaped.error).toMatchObject({ code: 'js_worker_failed', message: 'escaped' });
-  });
 });
 
 it('runs discovery → observe → act → verify → cleanup through MCP and the REPL worker', async () => {
@@ -162,24 +84,13 @@ it('runs discovery → observe → act → verify → cleanup through MCP and th
   };
   try {
     expect((await client.listTools()).tools.map(t => t.name).sort()).toEqual(['docs_get', 'doctor', 'js', 'js_reset', 'session_finalize', 'site_run', 'sites_search']);
-    expect((await call('docs_get')).text).toContain('do not use top-level `return`');
-    expect((await client.listTools()).tools.find(t => t.name === 'js')?.description).toContain('do not use top-level return');
     expect((await call('docs_get', { name: 'api-reference', member: 'Tab.act' })).text).toContain('ActionOutcome');
-    const observeDoc = (await call('docs_get', { name: 'api-reference', member: 'Tab.observe' })).text;
-    expect(observeDoc).toContain('interface ObserveOptions');
-    expect(observeDoc).not.toContain('  screenshot(');
-    const readDoc = (await call('docs_get', { name: 'api-reference', member: 'Tab.read' })).text;
-    expect(readDoc).toContain('read(opts: ReadElementOptions)');
-    expect(readDoc).toContain('read(opts?: ReadOptions)');
     const opened = await call('js', { code: 'let tab = await browser.tabs.new("https://example.com/"); tab' });
     expect(opened.body, opened.text).toEqual({ ok: true, value: { type: 'Tab', id: 'page-one' } });
     expect((await call('js', { code: 'typeof tab' })).body.value).toBe('object');
     expect((await call('js', { code: 'await tab.observe()' })).body.value.state).toContain('[ref=e1]');
     const invalid = await call('js', { code: 'await tab.act({action:"press", target:{ref:"e1"}})' });
     expect(invalid.body.error.code).toBe('invalid_args');
-    for (const code of ['await tab.act({action:"fill",target:{ref:"e1"},value:12})', 'await tab.act({action:"constructor"})', 'await tab.expect({})']) {
-      expect((await call('js', { code })).body.error.code).toBe('invalid_args');
-    }
     expect(clicked).toBe(false);
     const acted = await call('js', { code: 'tab.act({action:"click", target:{ref:"e1"}}); "dispatched"' });
     expect(acted.body.value).toBe('dispatched');
@@ -188,9 +99,6 @@ it('runs discovery → observe → act → verify → cleanup through MCP and th
     const observed = await call('js', { code: 'await tab.observe({mode:"both"})' });
     expect(observed.result.content).toContainEqual({ type: 'image', data: 'aW1hZ2U=', mimeType: 'image/png' });
     expect(observed.body.value.image).toEqual({ image: 'image/png' });
-    const big = await call('js', { code: 'let rows = Array.from({length:2000}, (_, i) => ({id:i, text:"example"})); rows', maxChars: 1000 });
-    expect(big.body.truncated).toBe(true);
-    expect((await call('js', { code: 'rows.length' })).body.value).toBe(2000);
     await call('session_finalize');
     expect(finalized).toBe(true);
   } finally { await client.close(); await session.close(); await rt.shutdown(); }

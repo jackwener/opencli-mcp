@@ -148,12 +148,12 @@ npm run typecheck
 
 ```bash
 npm run build:ext        # rebuild the extension
-npm test                 # focused regression tests
+npm test                 # core regression tests
 npm run smoke:setup      # isolated setup and Native Messaging end-to-end check
 npm run smoke:browser    # end-to-end check with a connected Chrome extension
 ```
 
-Run the tests relevant to your change. `npm run check` runs typecheck, build, and the full test suite when a broader check is needed. For browser changes, use the browser smoke test. `docs/api-reference.md` is generated during the build; update its TypeScript source rather than editing the generated file.
+Keep the automated suite focused on MCP browser flow, REPL persistence and interruption, connection recovery, session isolation, tab cleanup, and adapter execution. Prefer these integration checks over per-adapter mapping tests and implementation-detail assertions. Run the tests relevant to your change. `npm run check` runs typecheck, build, and the full test suite when a broader check is needed. For browser changes, use the browser smoke test. `docs/api-reference.md` is generated during the build; update its TypeScript source rather than editing the generated file.
 
 Maintainers: use the [release workflow](docs/releasing.md) to publish the npm package and GitHub Release.
 
