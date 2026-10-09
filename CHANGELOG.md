@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.29 — 2026-10-09
+
+- chore: prepare extension 0.0.21 release
+- test: trim suite to core integration coverage
+- fix: preserve input semantics and verify settled control values
+
 ## 0.0.28 — 2026-10-08
 
 - fix: keep action targets out of page DOM and disable cursor by default
