@@ -287,6 +287,54 @@ try {
     await send('exec', {world:'engine', code:'(() => { globalThis.__opencliPage.observeFrame = globalThis.savedObserveFrame; delete globalThis.savedObserveFrame; })()'});
   }
   console.log('Passed: old-extension capability simulation keeps core ARIA usable and rejects wrong-frame reads.');
+  // Exercise input behavior through the public API and real debugger events, not mocked setters.
+  await page.evaluate(() => {
+    document.body.innerHTML = `<input id="plain"><input id="masked"><input id="blocked" value="original">
+      <input id="reset"><input id="blurred"><input id="limited" maxlength="3">
+      <input id="date" type="date"><input id="color" type="color"><select id="choice"><option>A</option><option>B</option></select>
+      <div id="editor" contenteditable="true"><b>Rich</b></div><div id="inputs-shadow"></div>`;
+    window.inputEvents = [];
+    for (const type of ['beforeinput', 'input', 'change', 'keydown']) document.addEventListener(type, event => {
+      window.inputEvents.push({id:event.target.id, type, trusted:event.isTrusted});
+    });
+    document.querySelector('#masked').addEventListener('input', event => { event.target.value = Number(event.target.value.replaceAll(',', '')).toLocaleString('en-US'); });
+    document.querySelector('#blocked').addEventListener('beforeinput', event => event.preventDefault());
+    document.querySelector('#reset').addEventListener('input', event => requestAnimationFrame(() => { event.target.value = ''; }));
+    document.querySelector('#blurred').addEventListener('focus', event => event.target.blur());
+    document.querySelector('#inputs-shadow').attachShadow({mode:'open'}).innerHTML = '<input id="shadow-text" value="A"><div id="shadow-editor" contenteditable="true"><b>A</b></div>';
+  });
+  const input = (action, selector, value) => tab.act({action, target:{selector}, value});
+  assert.equal((await input('fill', '#plain', 'Hello 世界')).controlState, 'verified');
+  assert.equal((await input('type', '#plain', '!')).actual, 'Hello 世界!');
+  assert.equal((await input('fill', '#plain', '')).filled, true);
+  for (const [selector, value, actual] of [['#masked', '1234', '1,234'], ['#limited', '1234', '123'], ['#blocked', 'new', 'original'], ['#reset', 'temporary', '']]) {
+    const result = await input('fill', selector, value);
+    assert.equal(result.delivery, 'dispatched', JSON.stringify(result));
+    assert.equal(result.controlState, 'unverified');
+    assert.equal(result.filled, false);
+    assert.equal(result.actual, actual);
+  }
+  // An unchanged value ending in the requested text must not count as successful appending.
+  assert.equal((await input('type', '#blocked', 'original')).filled, false);
+  for (const [selector, value] of [['#date', '2026-10-09'], ['#color', '#123456']]) {
+    const result = await input('fill', selector, value);
+    assert.equal(result.controlState, 'verified');
+    assert.equal(result.method, 'dom');
+  }
+  assert.equal((await input('select', '#choice', 'B')).controlState, 'verified');
+  assert.equal((await input('type', '#editor', ' text')).actual, 'Rich text');
+  assert.equal(await page.locator('#editor b').count(), 1, 'Appending preserves rich-text structure');
+  assert.equal((await input('type', '#editor b', ' more')).actual, 'Rich text more');
+  assert.equal((await input('fill', '#editor', 'Replace 富文本')).filled, true);
+  assert.equal((await input('type', '#shadow-text', 'B')).actual, 'AB');
+  assert.equal((await input('type', '#shadow-editor', 'B')).actual, 'AB');
+  await assert.rejects(input('press', '#blurred', 'Enter'), /focus/);
+  await assert.rejects(input('fill', '#blurred', 'wrong target'), /focus/);
+  assert.equal((await input('press', 'body', 'Escape')).delivery, 'dispatched');
+  const events = await page.evaluate(() => window.inputEvents);
+  assert(!events.some(e => ['masked', 'blocked', 'limited', 'reset'].includes(e.id) && !e.trusted), 'No setter or synthetic event fallback after text input');
+  assert(!events.some(e => e.id === 'blurred' && e.type === 'keydown'), 'No key after focus loss');
+  console.log('Passed: browser text insertion, clear/append, formatting/rejection/reset, native controls, rich text, shadow inputs, and focus failure.');
   console.log('Passed: observe → find → exact read → real click/fill → observe, including OOPIF/nested/shadow controls and scoped diffs.');
 } finally {
   await client?.close();

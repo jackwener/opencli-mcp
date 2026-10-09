@@ -63,3 +63,11 @@ await tab.read({target:{frame:billing.frame, ref:amount.ref}});
 await tab.act({action:'fill', target:{frame:billing.frame, ref:amount.ref}, value:'42'});
 await tab.read({target:{frame:billing.frame, ref:amount.ref}});
 ```
+
+### Input results
+
+`fill` replaces the control's contents; `type` appends text using browser text insertion, not a sequence of key presses. Use `press` for individual keys and shortcuts. Native date/color/range controls and `select` use their control setters and report `method:"dom"`.
+
+For `fill` and `type`, `filled:true` and `controlState:"verified"` mean the value matched after settling. If the page formats, rejects, or resets the input during settling, the result is `delivery:"dispatched"`, `filled:false`, `controlState:"unverified"`, with `actual` when the original control is still readable. An unavailable/replaced control is also unverified. Inspect the result before continuing; use `tab.expect` for application-specific success. The engine does not overwrite the page's result with a DOM fallback. `settleMs:0` requests an immediate check only.
+
+Failure to focus a targeted control returns an error before sending input. Target `body` or `html` explicitly when a key should go to the page's current focus.

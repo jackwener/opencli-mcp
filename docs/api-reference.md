@@ -123,8 +123,7 @@ interface ActionOutcome {
   ref?: string; filled?: boolean; verified?: boolean; actual?: string;
   checked?: boolean; changed?: boolean; selected?: string[]; files?: number;
   openedTabs?: Array<{ tab?: string; tabId: number; url?: string; title?: string; pending?: true }>;
-  download?: { afterSequence: number; started: Array<{ seq: number; guid?: string; url: string; suggestedFilename: string }> };
-  method?: 'dom';
+  download?: { afterSequence: number; started: Array<{ seq: number; guid?: string; url: string; suggestedFilename: string }> }; method?: 'dom';
 }
 
 interface ObserveOptions {

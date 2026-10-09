@@ -186,9 +186,23 @@ export function pointInfo(args: { x: number; y: number }): PointInfo | null {
 const target = (): Element => { const el = actEl(); if (!el) throw new Error('error:notconnected'); return el; };
 const retarget = (el: Element): Element => (injected().retarget(el, 'follow-label') as Element | null) || el;
 
+function targetHasFocus(el: Element): boolean {
+  const active = (el.getRootNode() as Document | ShadowRoot).activeElement;
+  if (!el.isConnected || !active) return false;
+  return active === el || el.contains(active) || (
+    (el as HTMLElement).isContentEditable && (active as HTMLElement).isContentEditable && active.contains(el)
+  );
+}
 export function focus(): string {
   const el = actEl(); if (!el) return 'error:notconnected';
-  return String(injected().focusNode(retarget(el), false));
+  const t = retarget(el);
+  // Editable descendants receive input through their editing host, not their own focus().
+  let focusTarget = t;
+  while ((focusTarget as HTMLElement).isContentEditable && (focusTarget.parentElement as HTMLElement | null)?.isContentEditable) focusTarget = focusTarget.parentElement!;
+  const result = String(injected().focusNode(focusTarget, false));
+  if (result !== 'done') return result;
+  // Body/document targets intentionally send page-level keys to the current focus.
+  return t === document.body || t === document.documentElement || targetHasFocus(t) ? 'done' : 'error:focusfailed';
 }
 export function readValue(): string | null {
   const el = actEl(); if (!el) return null;
@@ -198,21 +212,14 @@ export function readValue(): string | null {
 /** Playwright's fill: 'done' (value set for date/color/range…), 'needsinput' (focused + selected, host must insert text), or 'error:…'. */
 export function fill(args: { value: string }): string {
   const el = actEl(); if (!el) return 'error:notconnected';
-  try { return String(injected().fill(el, args.value)); } catch (e) { return 'error:' + ((e as Error)?.message || String(e)); }
-}
-/** React/Vue controlled inputs that swallow insertText: native setter + input event. */
-export function nativeSet(args: { value: string }): boolean {
-  const el = actEl(); if (!el) return false;
-  const t = retarget(el) as HTMLInputElement | HTMLTextAreaElement;
-  if ((t as HTMLElement).isContentEditable) { t.textContent = args.value; }
-  else {
-    const proto = t.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
-    const set = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
-    if (set) set.call(t, args.value); else t.value = args.value;
-  }
-  t.dispatchEvent(new Event('input', { bubbles: true }));
-  t.dispatchEvent(new Event('change', { bubbles: true }));
-  return true;
+  try {
+    if ((retarget(el) as HTMLElement).isContentEditable) {
+      const focused = focus();
+      if (focused !== 'done') return focused;
+    }
+    const result = String(injected().fill(el, args.value));
+    return result === 'needsinput' && !targetHasFocus(retarget(el)) ? 'error:focusfailed' : result;
+  } catch (e) { return 'error:' + ((e as Error)?.message || String(e)); }
 }
 export function isChecked(): boolean | null { const el = actEl(); if (!el) return null; const r = stateOf(el, 'checked'); return r.received.startsWith('error:') ? null : r.matches; }
 export function select(args: { value: string }): SelectResult {
@@ -227,8 +234,18 @@ export function select(args: { value: string }): SelectResult {
   return { selected: Array.isArray(r) ? r.map(String) : [] };
 }
 export function caretToEnd(): void {
-  const el = document.activeElement as HTMLInputElement | null;
-  if (el && !(el as HTMLElement).isContentEditable && typeof el.setSelectionRange === 'function') { try { const n = el.value.length; el.setSelectionRange(n, n); } catch { /* not a text control */ } }
+  const el = retarget(target()) as HTMLElement;
+  if (el.isContentEditable) {
+    const range = el.ownerDocument.createRange();
+    range.selectNodeContents(el); range.collapse(false);
+    const selection = el.ownerDocument.getSelection();
+    selection?.removeAllRanges(); selection?.addRange(range);
+  } else {
+    const input = el as HTMLInputElement;
+    if (typeof input.setSelectionRange === 'function') {
+      try { input.setSelectionRange(input.value.length, input.value.length); } catch { /* non-text input */ }
+    }
+  }
 }
 /** Remember the file input associated with the target (inside it, its label's control, or the nearest form). */
 export function resolveUpload(args: { selector: string; fallback: string | null; files: number }): UploadTarget | ResolveFail {
@@ -347,7 +364,6 @@ function asPort(el: Element, heightFallback: number): ScrollPort {
       try { el.scrollTo({ left, top, behavior: 'instant' }); } catch { /* unsupported scrollTo */ }
       el.scrollLeft = left;
       el.scrollTop = top;
-      el.dispatchEvent(new Event('scroll'));
     },
   };
 }
@@ -726,7 +742,7 @@ export function check(args: Expectation): CheckResult {
   return { ok: failed.length === 0, failed, url: location.href, title: document.title };
 }
 
-export const api = { check, resolve, resolveUpload, fileSelectionCount, pointInfo, focus, readValue, fill, nativeSet, isChecked, select, caretToEnd, actionTarget, clearActionTarget, settle, frameProbe, frameElement, clearFrameProbe, aria, observeFrame, visibleDom, readElement, find, findByQuery, elementAt, annotate, unannotate, armClickProbe, readClickProbe, domClick, readText };
+export const api = { check, resolve, resolveUpload, fileSelectionCount, pointInfo, focus, readValue, fill, isChecked, select, caretToEnd, actionTarget, clearActionTarget, settle, frameProbe, frameElement, clearFrameProbe, aria, observeFrame, visibleDom, readElement, find, findByQuery, elementAt, annotate, unannotate, armClickProbe, readClickProbe, domClick, readText };
 export type PageApi = typeof api;
 
 (globalThis as any)[PAGE_GLOBAL] = api;

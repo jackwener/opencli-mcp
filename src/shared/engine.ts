@@ -182,6 +182,7 @@ async function performAction(io: ActIO, spec: ActSpec): Promise<ActResult> {
   const base: ActResult = { ok: true, kind: spec.kind, ref: r.ref, matches_n: r.matches_n, visible_n: r.matches_n, match_level: 'exact', point: { x: Math.round(r.x), y: Math.round(r.y) }, method: 'cdp', hit: r.hit, tag: r.tag, waitedMs: Date.now() - started, selector: r.selector ?? undefined };
   const focus = () => io.call('focus') as Promise<string>;
   const readValue = () => io.call('readValue') as Promise<string | null>;
+  let expectedValue: string | null = null;
   const navWait = spec.kind === 'click' || spec.kind === 'dblclick' || spec.kind === 'press' ? io.waitForNavigation?.(300, timeoutMs + 12_000) : undefined;
   switch (spec.kind) {
     case 'hover': await mouse(io, 'mouseMoved', r.x, r.y); break;
@@ -224,15 +225,8 @@ async function performAction(io: ActIO, spec: ActSpec): Promise<ActResult> {
       if (outcome === 'needsinput') {
         if (value === '') await key(io, 'Backspace'); else await io.cdp('Input.insertText', { text: value });
       } else if (outcome !== 'done') throw new ActError('not_editable', outcome.replace(/^error:/, ''));
-      let actual = await readValue();
-      let verified = actual === value;
-      if (!verified) {
-        await io.call('nativeSet', { value }); // controlled inputs that swallow insertText
-        actual = await readValue();
-        verified = actual === value;
-        Object.assign(base, { method: 'dom' });
-      }
-      Object.assign(base, { filled: true, verified, actual: actual ?? undefined });
+      expectedValue = value;
+      if (outcome === 'done') base.method = 'dom';
       break;
     }
     case 'type': {
@@ -240,14 +234,14 @@ async function performAction(io: ActIO, spec: ActSpec): Promise<ActResult> {
       if (!spec.value) throw new ActError('invalid_args', 'action "type" needs a non-empty value.');
       const f = await focus(); if (f !== 'done') throw new ActError('action_failed', `focus: ${f}`);
       await io.call('caretToEnd');
+      const before = await readValue();
+      expectedValue = before === null ? null : before + spec.value;
       await io.cdp('Input.insertText', { text: spec.value });
-      const actual = await readValue();
-      Object.assign(base, { filled: true, verified: Boolean(actual && actual.endsWith(spec.value)), actual: actual ?? undefined });
       break;
     }
     case 'press': {
       if (!spec.value) throw new ActError('invalid_args', 'action "press" needs a non-empty key. There is no default.');
-      await focus().catch(() => 'error:notconnected'); // non-focusable targets still receive page-level keys
+      const f = await focus(); if (f !== 'done') throw new ActError('action_failed', `focus: ${f}`, 'Focus the intended control before sending a key. No key was sent.');
       await key(io, spec.value);
       Object.assign(base, { key: spec.value });
       break;
@@ -282,6 +276,13 @@ async function performAction(io: ActIO, spec: ActSpec): Promise<ActResult> {
   const settleMs = spec.settleMs ?? 600;
   const actionDone = Date.now();
   if (settleMs > 0 && !(base as { navigated?: boolean }).navigated) { try { await io.call('settle', { maxMs: settleMs, quietMs: Math.min(200, settleMs) }, settleMs + 1500); } catch { /* navigation in flight */ } }
+  if (spec.kind === 'fill' || spec.kind === 'type') {
+    // Observe the settled control without overwriting formatting, validation, or editor state.
+    // Navigation or replacement can make the original control unavailable after input was sent.
+    const actual = await readValue().catch(() => null);
+    const verified = expectedValue !== null && actual === expectedValue;
+    Object.assign(base, { filled: verified, verified, actual: actual ?? undefined });
+  }
   const settled = Date.now();
   Object.assign(base, { elapsedMs: settled - started, timings: { resolveMs: base.waitedMs, actionMs: actionDone - started - base.waitedMs, settleMs: settled - actionDone } });
   return base;
